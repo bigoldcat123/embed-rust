@@ -12,7 +12,12 @@ use embassy_stm32::{
 };
 use embassy_time::Timer;
 use embedded_graphics::{
-    image::{Image, ImageRaw}, pixelcolor::BinaryColor, prelude::*
+    image::{Image, ImageRaw},
+    mono_font::{MonoTextStyleBuilder, ascii::FONT_6X10},
+    pixelcolor::BinaryColor,
+    prelude::*,
+    primitives::Circle,
+    text::{Baseline, Text},
 };
 use ssd1306::{I2CDisplayInterface, Ssd1306, mode::DisplayConfig, size::DisplaySize128x64};
 use {defmt_rtt as _, panic_probe as _};
@@ -46,22 +51,33 @@ async fn main(_spawner: Spawner) {
         interface,
         DisplaySize128x64,
         ssd1306::prelude::DisplayRotation::Rotate0,
-    ).into_buffered_graphics_mode();
+    )
+    .into_buffered_graphics_mode();
 
     display.init().unwrap();
 
-    let raw:ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("../rust.raw"), 64);
+    let text_style = MonoTextStyleBuilder::new()
+        .font(&FONT_6X10)
+        .text_color(BinaryColor::On)
+        .build();
+
+    let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("../rust.raw"), 64);
 
     let im = Image::new(&raw, Point::new(32, 0));
 
-    im.draw(&mut display).unwrap();
+    let hello_world = Text::with_baseline("Hello world!", Point::zero(), text_style, Baseline::Top);
 
-    display.flush().unwrap();
+    led.set_low();
     loop {
-        led.set_high();
+        display.clear_buffer();
+        im.draw(&mut display).unwrap();
+        display.flush().unwrap();
         Timer::after_millis(1000).await;
 
-        led.set_low();
-        Timer::after_millis(2000).await;
+        display.clear_buffer();
+
+        hello_world.draw(&mut display).unwrap();
+        display.flush().unwrap();
+        Timer::after_millis(1000).await;
     }
 }
