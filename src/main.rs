@@ -40,7 +40,8 @@ async fn main(_spawner: Spawner) {
         p.DMA1_CH7,
         Hertz(400_000),
         Default::default(),
-    );
+    )
+    .await;
 
     let mut led = Output::new(p.PC13, Level::High, Speed::Low);
 
@@ -59,10 +60,10 @@ async fn main(_spawner: Spawner) {
 
 // #[embassy_executor::task]
 // async fn ipt(gpio:Peri) {
-    
+
 // }
 
-fn play_with_iic<'d, T: Instance>(
+async fn play_with_iic<'d, T: Instance>(
     peri: impl Peripheral<P = T> + 'd,
     scl: impl Peripheral<P = impl SclPin<T>> + 'd,
     sda: impl Peripheral<P = impl SdaPin<T>> + 'd,
@@ -74,33 +75,109 @@ fn play_with_iic<'d, T: Instance>(
     freq: Hertz,
     config: Config,
 ) {
-    let i2c = I2c::new(peri, scl, sda, _irq, tx_dma, rx_dma, freq, config);
+    let mut i2c = I2c::new(peri, scl, sda, _irq, tx_dma, rx_dma, freq, config);
 
-    let interface = I2CDisplayInterface::new(i2c);
+    // 假设你已经构造了 embassy_stm32::i2c::I2c 实例 i2c
+    let addr = 0x3C; // SSD1306 通常是 0x3C 或 0x3D
+    let control_cmd = 0x00; // 控制字节：写命令
+    let control_data = 0x40; // 控制字节：写数据
 
-    let mut display = Ssd1306::new(
-        interface,
-        DisplaySize128x64,
-        ssd1306::prelude::DisplayRotation::Rotate0,
-    )
-    .into_buffered_graphics_mode();
+    // // 1️⃣ 初始化指令（简化）
+    // let init_cmds: &[u8] = &[
+    //     control_cmd,
+    //     0xAE, // Display OFF
+    //     control_cmd,
+    //     0x20,
+    //     0x00, // Vertical Addressing Mode
+    //     control_cmd,
+    //     0xAF, // Display ON
+    // ];
+    // i2c.blocking_write(addr, init_cmds).unwrap();
 
-    display.init().unwrap();
-    let text_style = MonoTextStyleBuilder::new()
-        .font(&FONT_10X20)
-        .text_color(BinaryColor::On)
-        .build();
+    let init_cmds = [
+        control_cmd, // 控制字节，表示后面是命令
+        0xAE,
+        0x20,
+        0x00,
+        0xA1,
+        0xC8,
+        0x81,
+        0x7F,
+        0xA4,
+        0xA6,
+        0xD3,
+        0x00,
+        0xD5,
+        0x80,
+        0xD9,
+        0xF1,
+        0xDA,
+        0x12,
+        0xDB,
+        0x40,
+        0x8D,
+        0x14,
+        0xAF,
+    ];
+    i2c.blocking_write(0x3C, &init_cmds).unwrap(); // 设备地址可能是 0x3C
 
-    let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("../rust.raw"), 64);
+    // 2️⃣ 设置页/列范围（以 Vertical Mode 为例）
+    let col_start = 0;
+    let col_end = 127;
+    let row_start = 0;
+    let row_end = 7;
+    let set_addr_cmds: &[u8] = &[
+        control_cmd,
+        0x21,
+        col_start,
+        col_end, // 设置列地址
+        0x22,
+        row_start,
+        row_end, // 设置页地址
+    ];
+    i2c.blocking_write(addr, set_addr_cmds).unwrap();
+    let mut i = 0;
+    loop {
+        info!("show{}", i);
+        // 3️⃣ 构造正方形数据：每个字节代表一列的8个像素
+        let mut buf = [i; 127 * 8 + 1];
+        buf[0] = control_data; // 控制字节：数据
+        i2c.blocking_write(addr, &buf).unwrap();
 
-    let r = Image::new(&raw, Point::new(32, 0));
+        if i == 255 {
+            i = 0;
+            continue;
+        }
+        i = i + 1;
+        Timer::after_millis(500).await;
+    }
 
-    let _ = Text::with_baseline("Hello world!", Point::zero(), text_style, Baseline::Top);
+    // let interface = I2CDisplayInterface::new(i2c);
 
-    let hello_rust_embed =
-        Text::with_baseline("Hello Embed!", Point::new(5, 35), text_style, Baseline::Top);
+    // let mut display = Ssd1306::new(
+    //     interface,
+    //     DisplaySize128x64,
+    //     ssd1306::prelude::DisplayRotation::Rotate0,
+    // )
+    // .into_buffered_graphics_mode();
 
-    // hello_rust_embed.draw(&mut display).unwrap();
-    r.draw(&mut display).unwrap();
-    display.flush().unwrap();
+    // display.init().unwrap();
+    // let text_style = MonoTextStyleBuilder::new()
+    //     .font(&FONT_10X20)
+    //     .text_color(BinaryColor::On)
+    //     .build();
+
+    // let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("../rust.raw"), 64);
+
+    // let r = Image::new(&raw, Point::new(32, 0));
+
+    // let _ = Text::with_baseline("Hello world!", Point::zero(), text_style, Baseline::Top);
+
+    // let hello_rust_embed =
+    //     Text::with_baseline("Hello Embed!", Point::new(5, 35), text_style, Baseline::Top);
+
+    // // hello_rust_embed.draw(&mut display).unwrap();
+    // r.draw(&mut display).unwrap();
+    // display.flush().unwrap();
 }
+
