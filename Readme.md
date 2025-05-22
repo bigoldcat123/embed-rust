@@ -1,0 +1,1 @@
+# this is a quick start setting for embassy-rs
