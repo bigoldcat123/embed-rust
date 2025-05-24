@@ -1,39 +1,151 @@
 #![no_std]
 #![no_main]
-
+#![allow(static_mut_refs)]
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    adc::{self, Adc},
-    bind_interrupts,
+    adc::Adc,
     gpio::{Input, Output},
-    i2c,
-    peripherals::{self, ADC1, PA0},
+    peripherals::{self, ADC1, PA0, PA8, PB0, PB13, PC13, TIM1},
     time::Hertz,
     timer::simple_pwm::{PwmPin, SimplePwm},
 };
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::Timer;
+use iic_pi::{CHANNEL, CHANNEL2, Irqs, iic_play::play_with_iic};
 use {defmt_rtt as _, panic_probe as _};
 
-bind_interrupts!(struct Irqs {
-    ADC1_2 => adc::InterruptHandler<ADC1>;
-    I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
-    I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
-});
+static mut c: embassy_sync::pubsub::PubSubChannel<NoopRawMutex, i32, 5, 5, 5> =
+    embassy_sync::pubsub::PubSubChannel::new();
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p: embassy_stm32::Peripherals = embassy_stm32::init(Default::default());
     info!("Hello World!");
-
     // let a: peripherals::PB13 = p.PB13;
     // let led = Output::new(p.PC13, Level::High, Speed::Low);
-    _spawner.spawn(adc(p.ADC1, p.PA0)).unwrap();
+    // _spawner.spawn(pc13_receiver(p.PC13)).unwrap();
+    // _spawner.spawn(catch_input(p.PB0)).unwrap();
+    // _spawner.spawn(receiver()).unwrap();
+    // _spawner.spawn(adc(p.ADC1, p.PA0)).unwrap();
     // _spawner.spawn(ipt(a, led)).unwrap();
 
-    let pwn = PwmPin::new_ch1(p.PA8, embassy_stm32::gpio::OutputType::PushPull);
+    // _spawner.spawn(pwn(p.PA8, p.TIM1)).unwrap();
+
+    unsafe {
+        let pub1: embassy_sync::pubsub::Publisher<'static, NoopRawMutex, i32, 5, 5, 5> =
+            c.publisher().unwrap();
+        _spawner.spawn(pub_handle_btn_push(pub1, p.PB0)).unwrap();
+    }
+    unsafe {
+        let sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5> =
+            c.subscriber().unwrap();
+        _spawner.spawn(exectuor_t(sub)).unwrap();
+    }
+    unsafe {
+        let sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5> =
+            c.subscriber().unwrap();
+        _spawner.spawn(led_denote(p.PC13, sub)).unwrap();
+    }
+
+    play_with_iic(
+        p.I2C1,
+        p.PB6,
+        p.PB7,
+        Irqs,
+        p.DMA1_CH6,
+        p.DMA1_CH7,
+        Hertz(400_000),
+        Default::default(),
+    )
+    .await;
+}
+
+#[embassy_executor::task]
+async fn exectuor_t(
+    mut sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5>,
+) {
+    loop {
+        let msg = sub.next_message_pure().await;
+        if msg == 1 {
+            info!("exec!!!");
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn led_denote(
+    led: PC13,
+    mut sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5>,
+) {
+    let mut led = Output::new(
+        led,
+        embassy_stm32::gpio::Level::High,
+        embassy_stm32::gpio::Speed::Medium,
+    );
+    loop {
+        let msg = sub.next_message_pure().await;
+        if msg == 1 {
+            led.set_low();
+        } else {
+            led.set_high();
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn pub_handle_btn_push(
+    p: embassy_sync::pubsub::Publisher<'static, NoopRawMutex, i32, 5, 5, 5>,
+    pin: PB0,
+) {
+    let pin = Input::new(pin, embassy_stm32::gpio::Pull::Up);
+    loop {
+        if pin.is_low() {
+            info!("push!");
+            p.publish(1).await;
+            while pin.is_low() {
+                Timer::after_millis(1).await;
+            }
+            p.publish(0).await;
+        }
+        Timer::after_millis(100).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn receiver() {
+    loop {
+        unsafe {
+            let a = CHANNEL.receive().await;
+            info!("receivec {}", a);
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn catch_input(pin: PB0) {
+    let pin = Input::new(pin, embassy_stm32::gpio::Pull::Up);
+    loop {
+        if pin.is_low() {
+            info!("push!");
+            unsafe {
+                CHANNEL2.send(1).await;
+            }
+            while pin.is_low() {
+                Timer::after_millis(1).await;
+            }
+            unsafe {
+                CHANNEL2.send(0).await;
+            }
+        }
+        Timer::after_millis(100).await;
+    }
+}
+#[embassy_executor::task]
+async fn pwn(pwm_pin: PA8, tim: TIM1) {
+    let pwn = PwmPin::new_ch1(pwm_pin, embassy_stm32::gpio::OutputType::PushPull);
     let mut pwm = SimplePwm::new(
-        p.TIM1,
+        tim,
         Some(pwn),
         None,
         None,
@@ -56,11 +168,34 @@ async fn main(_spawner: Spawner) {
         // Timer::after_millis(300).await;
         for i in 3..ch1.max_duty_cycle() {
             ch1.set_duty_cycle(i);
+            unsafe {
+                CHANNEL.send(i as u32).await;
+            }
             Timer::after_millis(20).await;
         }
         for i in (3..ch1.max_duty_cycle()).rev() {
             ch1.set_duty_cycle(i);
             Timer::after_millis(10).await;
+        }
+    }
+}
+#[embassy_executor::task]
+async fn pc13_receiver(pin: PC13) {
+    let mut out = Output::new(
+        pin,
+        embassy_stm32::gpio::Level::High,
+        embassy_stm32::gpio::Speed::Medium,
+    );
+    loop {
+        unsafe {
+            let res = CHANNEL2.receive().await;
+            if res == 1 {
+                info!("set high");
+                out.set_low();
+            } else {
+                out.set_high();
+                info!("set low");
+            }
         }
     }
 }

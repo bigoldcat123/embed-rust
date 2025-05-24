@@ -1,3 +1,4 @@
+use defmt::info;
 use embassy_stm32::{
     Peripheral,
     i2c::{
@@ -7,6 +8,9 @@ use embassy_stm32::{
     interrupt,
     time::Hertz,
 };
+use embassy_time::Timer;
+
+use crate::CHANNEL;
 
 ///
 ///```
@@ -49,11 +53,47 @@ pub async fn play_with_iic<'d, T: Instance>(
     let mut i2c = I2c::new(peri, scl, sda, _irq, tx_dma, rx_dma, freq, config);
 
     init(&mut i2c);
+    let mut display_cache = [00; 128 * 8];
     set_writing_area(&mut i2c, (0, 7), (0, 127));
-    write_data(&mut i2c, &[0xff; 128 * 8], 128 * 8);
+    loop {
+        for g in 0..4 {
+            for i in g..g + 4 {
+                for j in 0..40 {
+                    if j == 0 || j == 39 {
+                        if display_cache[i * 128 + j] == 0xff {
+                            display_cache[i * 128 + j] = 0x00;
+                        } else {
+                            display_cache[i * 128 + j] = 0xff;
+                        }
+                        continue;
+                    }
+                    if i == g + 4 - 1 {
+                        if display_cache[i * 128 + j] == 0x80 {
+                            display_cache[i * 128 + j] = 0x00;
+                        } else {
+                            display_cache[i * 128 + j] = 0x80;
+                        }
+                    }
+                    if i == g {
+                        if display_cache[i * 128 + j] == 0x01 {
+                            display_cache[i * 128 + j] = 0x00;
+                        } else {
+                            display_cache[i * 128 + j] = 0x01;
+                        }
+                    }
+                }
+            }
+            write_data(&mut i2c, &display_cache, 128 * 8);
 
-    set_writing_area(&mut i2c, (0, 7), (32, 32 + 64 - 1));
-    write_data(&mut i2c, include_bytes!("../rust.bin"), 128 * 4);
+            display_cache.fill(0);
+            Timer::after_millis(500).await;
+        }
+
+        Timer::after_millis(500).await;
+    }
+
+    // set_writing_area(&mut i2c, (0, 7), (32, 32 + 64 - 1));
+    // write_data(&mut i2c, include_bytes!("../rust.bin"), 128 * 4);
 }
 
 fn init(i2c: &mut I2c<'_, embassy_stm32::mode::Async>) {
