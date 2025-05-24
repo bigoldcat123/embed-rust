@@ -1,203 +1,105 @@
 #![no_std]
 #![no_main]
 
-use core::mem;
-
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    Peripheral, bind_interrupts,
-    gpio::{Input, Level, Output, Speed},
-    i2c::{
-        self, Config, ErrorInterruptHandler, EventInterruptHandler, I2c, Instance, RxDma, SclPin,
-        SdaPin, TxDma,
-    },
-    interrupt, peripherals,
+    adc::{self, Adc},
+    bind_interrupts,
+    gpio::{Input, Output},
+    i2c,
+    peripherals::{self, ADC1, PA0},
     time::Hertz,
+    timer::simple_pwm::{PwmPin, SimplePwm},
 };
 use embassy_time::Timer;
-use embedded_graphics::{
-    image::{Image, ImageRaw},
-    mono_font::{MonoTextStyleBuilder, ascii::FONT_10X20},
-    pixelcolor::BinaryColor,
-    prelude::*,
-    text::{Baseline, Text},
-};
-use ssd1306::{I2CDisplayInterface, Ssd1306, mode::DisplayConfig, size::DisplaySize128x64};
 use {defmt_rtt as _, panic_probe as _};
+
 bind_interrupts!(struct Irqs {
+    ADC1_2 => adc::InterruptHandler<ADC1>;
     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
 });
+
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p: embassy_stm32::Peripherals = embassy_stm32::init(Default::default());
     info!("Hello World!");
-    play_with_iic(
-        p.I2C1,
-        p.PB6,
-        p.PB7,
-        Irqs,
-        p.DMA1_CH6,
-        p.DMA1_CH7,
-        Hertz(400_000),
+
+    // let a: peripherals::PB13 = p.PB13;
+    // let led = Output::new(p.PC13, Level::High, Speed::Low);
+    _spawner.spawn(adc(p.ADC1, p.PA0)).unwrap();
+    // _spawner.spawn(ipt(a, led)).unwrap();
+
+    let pwn = PwmPin::new_ch1(p.PA8, embassy_stm32::gpio::OutputType::PushPull);
+    let mut pwm = SimplePwm::new(
+        p.TIM1,
+        Some(pwn),
+        None,
+        None,
+        None,
+        Hertz(10_1000),
         Default::default(),
-    )
-    .await;
-
-    let mut led = Output::new(p.PC13, Level::High, Speed::Low);
-
-    led.set_low();
-
-    let ipt = Input::new(p.PB13, embassy_stm32::gpio::Pull::Up);
+    );
+    let mut ch1 = pwm.ch1();
+    ch1.enable();
+    info!("PWM iniialized!");
+    info!("PWM max duty {}", ch1.max_duty_cycle());
     loop {
-        if ipt.is_low() {
-            info!("i am low!");
-        } else {
-            info!("i am high!");
+        // ch1.set_duty_cycle_fully_off();
+        // Timer::after_millis(300).await;
+        // ch1.set_duty_cycle_fraction(1, 4);
+        // Timer::after_millis(300).await;
+        // ch1.set_duty_cycle_fraction(1, 2);
+        // Timer::after_millis(300).await;
+        // ch1.set_duty_cycle(ch1.max_duty_cycle() - 1);
+        // Timer::after_millis(300).await;
+        for i in 3..ch1.max_duty_cycle() {
+            ch1.set_duty_cycle(i);
+            Timer::after_millis(20).await;
         }
-        Timer::after_millis(300).await;
+        for i in (3..ch1.max_duty_cycle()).rev() {
+            ch1.set_duty_cycle(i);
+            Timer::after_millis(10).await;
+        }
     }
 }
 
-// #[embassy_executor::task]
-// async fn ipt(gpio:Peri) {
+#[embassy_executor::task]
+async fn adc(adc_port: ADC1, mut pin: PA0) {
+    let mut adc = Adc::new(adc_port);
+    let mut vrefint = adc.enable_vref();
+    let varify_sample = adc.read(&mut vrefint).await;
+    let convert_to_millivolts = |sample| {
+        // From http://www.st.com/resource/en/datasheet/CD00161566.pdf
+        // 5.3.4 Embedded reference voltage
+        const VREFINT_MV: u32 = 1200; // mV
 
-// }
-
-async fn play_with_iic<'d, T: Instance>(
-    peri: impl Peripheral<P = T> + 'd,
-    scl: impl Peripheral<P = impl SclPin<T>> + 'd,
-    sda: impl Peripheral<P = impl SdaPin<T>> + 'd,
-    _irq: impl interrupt::typelevel::Binding<T::EventInterrupt, EventInterruptHandler<T>>
-    + interrupt::typelevel::Binding<T::ErrorInterrupt, ErrorInterruptHandler<T>>
-    + 'd,
-    tx_dma: impl Peripheral<P = impl TxDma<T>> + 'd,
-    rx_dma: impl Peripheral<P = impl RxDma<T>> + 'd,
-    freq: Hertz,
-    config: Config,
-) {
-    let mut i2c = I2c::new(peri, scl, sda, _irq, tx_dma, rx_dma, freq, config);
-
-    // 假设你已经构造了 embassy_stm32::i2c::I2c 实例 i2c
-    let addr = 0x3C; // SSD1306 通常是 0x3C 或 0x3D
-    let control_cmd = 0x00; // 控制字节：写命令
-    let control_data = 0x40; // 控制字节：写数据
-
-    // // 1️⃣ 初始化指令（简化）
-    // let init_cmds: &[u8] = &[
-    //     control_cmd,
-    //     0xAE, // Display OFF
-    //     control_cmd,
-    //     0x20,
-    //     0x00, // Vertical Addressing Mode
-    //     control_cmd,
-    //     0xAF, // Display ON
-    // ];
-    // i2c.blocking_write(addr, init_cmds).unwrap();
-
-    let init_cmds = [
-        control_cmd, // 控制字节，表示后面是命令
-        0xAE,
-        0x20,
-        0x00, // horizional
-        0xA1,
-        0xC8,
-        0x81,
-        0x7F,
-        0xA4,
-        0xA6,
-        0xD3,
-        0x00,
-        0xD5,
-        0x80,
-        0xD9,
-        0xF1,
-        0xDA,
-        0x12,
-        0xDB,
-        0x40,
-        0x8D,
-        0x14,
-        0xAF,
-    ];
-    i2c.blocking_write(0x3C, &init_cmds).unwrap(); // 设备地址可能是 0x3C
-
-    // 2️⃣ 设置页/列范围（以 Vertical Mode 为例）
-    let col_start = 0;
-    let col_end = 127;
-    let row_start = 0;
-    let row_end = 7;
-    let set_addr_cmds: &[u8] = &[
-        control_cmd,
-        0x21,
-        col_start,
-        col_end, // 设置列地址
-        0x22,
-        row_start,
-        row_end, // 设置页地址
-    ];
-    i2c.blocking_write(addr, set_addr_cmds).unwrap();
-    // let mut i = 0;
-    // loop {
-    //     info!("show{}", i);
-    //     // 3️⃣ 构造正方形数据：每个字节代表一列的8个像素
-    //     let mut buf = [i; 128 * 8 + 1];
-    //     buf[0] = control_data; // 控制字节：数据
-    //     i2c.blocking_write(addr, &buf).unwrap();
-
-    //     if i == 255 {
-    //         i = 0;
-    //         continue;
-    //     }
-    //     i = i + 1;
-    //     Timer::after_millis(500).await;
-    // }
-
-    let b = include_bytes!("../news.bin");
-    let a: &'static [u8; 128 * 8] = include_bytes!("../girl.bin");
-    let mut buf = [control_data; 128 * 8 + 1];
-
-    for i in 1..128 * 8 + 1 {
-        buf[i] = a[i - 1];
-    }
-    let mut buf2 = [control_data; 128 * 8 + 1];
-
-    for i in 1..128 * 8 + 1 {
-        buf2[i] = b[i - 1];
-    }
+        (u32::from(sample) * VREFINT_MV / u32::from(varify_sample)) as u16
+    };
+    info!("start detecting");
     loop {
-        i2c.blocking_write(addr, &buf).unwrap();
-        Timer::after_secs(2).await;
-        i2c.blocking_write(addr, &buf2).unwrap();
-        Timer::after_secs(2).await;
+        let v = adc.read(&mut pin).await;
+        info!("--> {} - {} mV", v, convert_to_millivolts(v));
+        Timer::after_millis(100).await;
     }
+}
 
-    // let interface = I2CDisplayInterface::new(i2c);
-
-    // let mut display = Ssd1306::new(
-    //     interface,
-    //     DisplaySize128x64,
-    //     ssd1306::prelude::DisplayRotation::Rotate0,
-    // )
-    // .into_buffered_graphics_mode();
-
-    // display.init().unwrap();
-    // let text_style = MonoTextStyleBuilder::new()
-    //     .font(&FONT_10X20)
-    //     .text_color(BinaryColor::On)
-    //     .build();
-
-    // let raw: ImageRaw<BinaryColor> = ImageRaw::new(include_bytes!("../rust.raw"), 64);
-
-    // let r = Image::new(&raw, Point::new(32, 0));
-
-    // let _ = Text::with_baseline("Hello world!", Point::zero(), text_style, Baseline::Top);
-
-    // let hello_rust_embed =
-    //     Text::with_baseline("Hello Embed!", Point::new(5, 35), text_style, Baseline::Top);
-
-    // // hello_rust_embed.draw(&mut display).unwrap();
-    // r.draw(&mut display).unwrap();
-    // display.flush().unwrap();
+#[embassy_executor::task]
+async fn ipt(gpio: peripherals::PB13, mut led: Output<'static>) {
+    let ipt = Input::new(gpio, embassy_stm32::gpio::Pull::Up);
+    let mut shinning = false;
+    loop {
+        Timer::after_millis(300).await;
+        if ipt.is_low() {
+            info!("touched!");
+            shinning = !shinning;
+            if shinning {
+                led.set_high();
+            } else {
+                led.set_low();
+            }
+            Timer::after_millis(500).await;
+        }
+    }
 }
