@@ -8,6 +8,7 @@ use embassy_stm32::{
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
 
 pub mod iic_play;
+pub mod at24c64;
 
 pub static mut CHANNEL: Channel<NoopRawMutex, u32, 3> = Channel::<NoopRawMutex, u32, 3>::new();
 pub static mut CHANNEL2: Channel<NoopRawMutex, u32, 3> = Channel::<NoopRawMutex, u32, 3>::new();
@@ -17,4 +18,6 @@ bind_interrupts!(pub struct Irqs {
     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
     TIM2 => CaptureCompareInterruptHandler<embassy_stm32::peripherals::TIM2>;
+    I2C2_EV => i2c::EventInterruptHandler<peripherals::I2C2>;
+    I2C2_ER => i2c::ErrorInterruptHandler<peripherals::I2C2>;
 });

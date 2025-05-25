@@ -6,16 +6,16 @@ use embassy_executor::Spawner;
 use embassy_stm32::{
     adc::Adc,
     gpio::{Input, Output},
-    peripherals::{self, ADC1, PA0, PA8, PB0, PB13, PC13, TIM1},
+    peripherals::{self, ADC1, PA0, PA8, PB0, PC13, TIM1},
     time::Hertz,
     timer::simple_pwm::{PwmPin, SimplePwm},
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::Timer;
-use iic_pi::{CHANNEL, CHANNEL2, Irqs, iic_play::play_with_iic};
+use iic_pi::{CHANNEL, CHANNEL2};
 use {defmt_rtt as _, panic_probe as _};
 
-static mut c: embassy_sync::pubsub::PubSubChannel<NoopRawMutex, i32, 5, 5, 5> =
+static mut C: embassy_sync::pubsub::PubSubChannel<NoopRawMutex, i32, 5, 5, 5> =
     embassy_sync::pubsub::PubSubChannel::new();
 
 #[embassy_executor::main]
@@ -34,31 +34,19 @@ async fn main(_spawner: Spawner) {
 
     unsafe {
         let pub1: embassy_sync::pubsub::Publisher<'static, NoopRawMutex, i32, 5, 5, 5> =
-            c.publisher().unwrap();
+            C.publisher().unwrap();
         _spawner.spawn(pub_handle_btn_push(pub1, p.PB0)).unwrap();
     }
     unsafe {
         let sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5> =
-            c.subscriber().unwrap();
+            C.subscriber().unwrap();
         _spawner.spawn(exectuor_t(sub)).unwrap();
     }
     unsafe {
         let sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5> =
-            c.subscriber().unwrap();
+            C.subscriber().unwrap();
         _spawner.spawn(led_denote(p.PC13, sub)).unwrap();
     }
-
-    play_with_iic(
-        p.I2C1,
-        p.PB6,
-        p.PB7,
-        Irqs,
-        p.DMA1_CH6,
-        p.DMA1_CH7,
-        Hertz(400_000),
-        Default::default(),
-    )
-    .await;
 }
 
 #[embassy_executor::task]

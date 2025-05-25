@@ -692,6 +692,7 @@ dependencies = [
  "embassy-usb",
  "embedded-graphics",
  "embedded-hal 0.2.7",
+ "embedded-hal-async",
  "heapless",
  "nb 1.1.0",
  "panic-probe",
