@@ -6,17 +6,21 @@ use embassy_executor::Spawner;
 use embassy_stm32::{
     adc::Adc,
     gpio::{Input, Output},
-    peripherals::{self, ADC1, PA0, PA8, PB0, PC13, TIM1},
+    i2c::I2c,
+    peripherals::{self, ADC1, PA0, PA5, PA8, PB0, PC13, TIM1},
     time::Hertz,
     timer::simple_pwm::{PwmPin, SimplePwm},
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::Timer;
-use iic_pi::{CHANNEL, CHANNEL2};
+use iic_pi::{CHANNEL, CHANNEL2, Irqs, ssd1315::Ssd1315};
 use {defmt_rtt as _, panic_probe as _};
 
 static mut C: embassy_sync::pubsub::PubSubChannel<NoopRawMutex, i32, 5, 5, 5> =
     embassy_sync::pubsub::PubSubChannel::new();
+
+static mut CHANNLE: embassy_sync::channel::Channel<NoopRawMutex, u8, 4> =
+    embassy_sync::channel::Channel::new();
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -46,6 +50,51 @@ async fn main(_spawner: Spawner) {
         let sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5> =
             C.subscriber().unwrap();
         _spawner.spawn(led_denote(p.PC13, sub)).unwrap();
+    }
+
+    _spawner.spawn(btn_push(p.PA5)).unwrap();
+
+    let i2c = I2c::new(
+        p.I2C2,
+        p.PB10,
+        p.PB11,
+        Irqs,
+        p.DMA1_CH4,
+        p.DMA1_CH5,
+        Hertz(400_000),
+        Default::default(),
+    );
+    let mut ssd1315 = Ssd1315::new(i2c);
+    ssd1315.init().await;
+    ssd1315.draw().await;
+    loop {
+        unsafe {
+            let c = CHANNLE.receive().await;
+            ssd1315.clear().await;
+            ssd1315.add_square(c as usize);
+            ssd1315.draw().await;
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn btn_push(btn_pin: PA5) {
+    let mut crt = 0;
+    let btn = Input::new(btn_pin, embassy_stm32::gpio::Pull::Up);
+
+    loop {
+        if btn.is_low() {
+            unsafe {
+                crt += 1;
+                if crt == 6 {
+                    crt = 0;
+                }
+                info!("buffon push {}", crt);
+                CHANNLE.send(crt).await;
+                while btn.is_low() {}
+            }
+        }
+        Timer::after_millis(10).await;
     }
 }
 
