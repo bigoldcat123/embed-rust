@@ -15,9 +15,9 @@ impl<T: I2c> Ssd1315<T> {
             display_cache: [0; 128 * 8 + 1],
         }
     }
-    pub fn add_square(&mut self,start:usize) {
-        for i in start..start + 2 {
-            for j in 0..64 {
+    pub fn add_square(&mut self, row: usize, col: usize) {
+        for i in row..row + 2 {
+            for j in col..col + 64 {
                 self.display_cache[i * 128 + j + 1] = 0xff
             }
         }
