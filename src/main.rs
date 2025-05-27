@@ -7,6 +7,7 @@ use embassy_stm32::{
     adc::Adc,
     gpio::{Input, Output},
     i2c::I2c,
+    mode::Async,
     peripherals::{self, ADC1, PA0, PA5, PA6, PA8, PB0, PC13, TIM1},
     time::Hertz,
     timer::simple_pwm::{PwmPin, SimplePwm},
@@ -118,7 +119,9 @@ async fn main(_spawner: Spawner) {
         }
     }
 }
-
+#[embassy_executor::task]
+async fn cmd_sender_i3c(i: I2c<'static, Async>) {
+}
 #[embassy_executor::task]
 async fn cmd_sender() {
     loop {

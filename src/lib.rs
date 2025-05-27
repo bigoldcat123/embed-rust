@@ -4,11 +4,12 @@ use embassy_stm32::{
     adc, bind_interrupts, i2c,
     peripherals::{self, ADC1},
     timer::CaptureCompareInterruptHandler,
+    usart,
 };
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
 
-pub mod iic_play;
 pub mod at24c64;
+pub mod iic_play;
 pub mod ssd1315;
 
 pub static mut CHANNEL: Channel<NoopRawMutex, u32, 3> = Channel::<NoopRawMutex, u32, 3>::new();
@@ -21,4 +22,5 @@ bind_interrupts!(pub struct Irqs {
     TIM2 => CaptureCompareInterruptHandler<embassy_stm32::peripherals::TIM2>;
     I2C2_EV => i2c::EventInterruptHandler<peripherals::I2C2>;
     I2C2_ER => i2c::ErrorInterruptHandler<peripherals::I2C2>;
+    USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
