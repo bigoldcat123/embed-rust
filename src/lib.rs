@@ -9,7 +9,6 @@ use embassy_stm32::{
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
 
 pub mod at24c64;
-pub mod iic_play;
 pub mod ssd1315;
 
 pub static mut CHANNEL: Channel<NoopRawMutex, u32, 3> = Channel::<NoopRawMutex, u32, 3>::new();

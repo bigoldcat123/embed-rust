@@ -82,45 +82,44 @@ async fn main(_spawner: Spawner) {
     ssd1315.draw().await;
     let mut current_row = 0;
     let mut current_col = 0;
+    let size = (20,20);
+    let step = 10;
     loop {
         unsafe {
             let c = CHANNLE.receive().await;
             match c {
                 Direction::Down => {
-                    current_row += 1;
-                    if current_row == 7 {
+                    current_row += step;
+                    if current_row >= 63 - size.1 {
                         current_row = 0;
                     }
                 }
                 Direction::Up => {
                     if current_row == 0 {
-                        current_row = 6;
+                        current_row = 63 - size.1;
                     } else {
-                        current_row -= 1;
+                        current_row -= step;
                     }
                 }
                 Direction::Left => {
                     if current_col == 0 {
-                        current_col = 64;
+                        current_col = 127 - size.0;
                     } else {
-                        current_col -= 64;
+                        current_col -= step;
                     }
                 }
                 Direction::Right => {
-                    current_col += 64;
-                    if current_col > 64 {
+                    current_col += step;
+                    if current_col > 127 - size.0 {
                         current_col = 0;
                     }
                 }
             }
             ssd1315.clear().await;
-            ssd1315.add_square(current_row, current_col);
+            ssd1315.add_square_sized(current_row, current_col,size.0,size.1);
             ssd1315.draw().await;
         }
     }
-}
-#[embassy_executor::task]
-async fn cmd_sender_i3c(i: I2c<'static, Async>) {
 }
 #[embassy_executor::task]
 async fn cmd_sender() {
