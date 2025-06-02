@@ -1,6 +1,37 @@
 #![no_std]
 #![no_main]
+// use std::time::Duration;
+// use nusb::transfer::RequestBuffer;
 
+// #[tokio::main(flavor = "current_thread")]
+// async fn main() {
+//     env_logger::init();
+//     let device = nusb::list_devices()
+//         .unwrap()
+//         .find(|x| x.vendor_id() == 0x1234)
+//         .unwrap();
+//     println!("{:?}", device);
+
+//     let device = device.open().unwrap();
+//     let config = device.active_configuration().unwrap();
+//     println!("{:#?}", config);
+
+//     let interface = device.claim_interface(1).unwrap();
+//     loop {
+//         interface
+//             .bulk_out(0x02, vec![1, 2, 3])
+//             .await
+//             .into_result()
+//             .unwrap();
+//         let x = interface
+//             .bulk_in(0x83, RequestBuffer::new(10))
+//             .await
+//             .into_result()
+//             .unwrap();
+//         println!("{:?}", x);
+//         tokio::time::sleep(Duration::from_secs(1)).await;
+//     }
+// }
 use defmt::{panic, *};
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
