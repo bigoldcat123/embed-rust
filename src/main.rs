@@ -1,371 +1,124 @@
 #![no_std]
 #![no_main]
-#![allow(static_mut_refs)]
-use defmt::*;
+
+use defmt::{panic, *};
 use embassy_executor::Spawner;
-use embassy_stm32::{
-    adc::Adc,
-    gpio::{Input, Output},
-    i2c::I2c,
-    mode::Async,
-    peripherals::{self, ADC1, PA0, PA5, PA6, PA8, PB0, PC13, TIM1},
-    time::Hertz,
-    timer::simple_pwm::{PwmPin, SimplePwm},
-};
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_futures::join::join;
+use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::time::Hertz;
+use embassy_stm32::usb::{Driver, Instance};
+use embassy_stm32::{Config, Peripheral, bind_interrupts, peripherals, usb};
 use embassy_time::Timer;
-use iic_pi::{CHANNEL, CHANNEL2, Irqs, ssd1315::Ssd1315};
+use embassy_usb::Builder;
+use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use embassy_usb::driver::EndpointError;
 use {defmt_rtt as _, panic_probe as _};
 
-static mut C: embassy_sync::pubsub::PubSubChannel<NoopRawMutex, i32, 5, 5, 5> =
-    embassy_sync::pubsub::PubSubChannel::new();
-
-static mut CHANNLE: embassy_sync::channel::Channel<NoopRawMutex, Direction, 4> =
-    embassy_sync::channel::Channel::new();
-
-static mut CMD_BUF: [u8; 2] = [0; 2];
-static mut CMD_BUF_IDX: usize = 0;
-
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
+bind_interrupts!(struct Irqs {
+    USB_LP_CAN1_RX0 => usb::InterruptHandler<peripherals::USB>;
+});
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let p: embassy_stm32::Peripherals = embassy_stm32::init(Default::default());
+    let mut config = Config::default();
+    {
+        use embassy_stm32::rcc::*;
+        config.rcc.hse = Some(Hse {
+            freq: Hertz(8_000_000),
+            // Oscillator for bluepill, Bypass for nucleos.
+            mode: HseMode::Oscillator,
+        });
+        config.rcc.pll = Some(Pll {
+            src: PllSource::HSE,
+            prediv: PllPreDiv::DIV1,
+            mul: PllMul::MUL9,
+        });
+        config.rcc.sys = Sysclk::PLL1_P;
+        config.rcc.ahb_pre = AHBPrescaler::DIV1;
+        config.rcc.apb1_pre = APBPrescaler::DIV2;
+        config.rcc.apb2_pre = APBPrescaler::DIV1;
+    }
+    let p = embassy_stm32::init(config);
+
     info!("Hello World!");
-    // let a: peripherals::PB13 = p.PB13;
-    // let led = Output::new(p.PC13, Level::High, Speed::Low);
-    // _spawner.spawn(pc13_receiver(p.PC13)).unwrap();
-    // _spawner.spawn(catch_input(p.PB0)).unwrap();
-    // _spawner.spawn(receiver()).unwrap();
-    // _spawner.spawn(adc(p.ADC1, p.PA0)).unwrap();
-    // _spawner.spawn(ipt(a, led)).unwrap();
-
-    // _spawner.spawn(pwn(p.PA8, p.TIM1)).unwrap();
 
     unsafe {
-        let pub1: embassy_sync::pubsub::Publisher<'static, NoopRawMutex, i32, 5, 5, 5> =
-            C.publisher().unwrap();
-        _spawner.spawn(pub_handle_btn_push(pub1, p.PB0)).unwrap();
-    }
-    unsafe {
-        let sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5> =
-            C.subscriber().unwrap();
-        _spawner.spawn(exectuor_t(sub)).unwrap();
-    }
-    unsafe {
-        let sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5> =
-            C.subscriber().unwrap();
-        _spawner.spawn(led_denote(p.PC13, sub)).unwrap();
-    }
-
-    _spawner.spawn(btn_push_hign(p.PA5)).unwrap();
-    _spawner.spawn(btn_push_low(p.PA6)).unwrap();
-    _spawner.spawn(cmd_sender()).unwrap();
-
-    let i2c = I2c::new(
-        p.I2C2,
-        p.PB10,
-        p.PB11,
-        Irqs,
-        p.DMA1_CH4,
-        p.DMA1_CH5,
-        Hertz(400_000),
-        Default::default(),
-    );
-    let mut ssd1315 = Ssd1315::new(i2c);
-    ssd1315.init().await;
-    ssd1315.draw().await;
-    let mut current_row = 0;
-    let mut current_col = 0;
-    let size = (20,20);
-    let step = 10;
-    loop {
-        unsafe {
-            let c = CHANNLE.receive().await;
-            match c {
-                Direction::Down => {
-                    current_row += step;
-                    if current_row >= 63 - size.1 {
-                        current_row = 0;
-                    }
-                }
-                Direction::Up => {
-                    if current_row == 0 {
-                        current_row = 63 - size.1;
-                    } else {
-                        current_row -= step;
-                    }
-                }
-                Direction::Left => {
-                    if current_col == 0 {
-                        current_col = 127 - size.0;
-                    } else {
-                        current_col -= step;
-                    }
-                }
-                Direction::Right => {
-                    current_col += step;
-                    if current_col > 127 - size.0 {
-                        current_col = 0;
-                    }
-                }
-            }
-            ssd1315.clear().await;
-            ssd1315.add_square_sized(current_row, current_col,size.0,size.1);
-            ssd1315.draw().await;
-        }
-    }
-}
-#[embassy_executor::task]
-async fn cmd_sender() {
-    loop {
-        unsafe {
-            if CMD_BUF_IDX == CMD_BUF.len() {
-                CMD_BUF_IDX = 0;
-                match CMD_BUF {
-                    [0, 0] => {
-                        info!("up");
-                        CHANNLE.send(Direction::Up).await;
-                    }
-                    [0, 1] => {
-                        info!("down");
-                        CHANNLE.send(Direction::Down).await;
-                    }
-                    [1, 0] => {
-                        info!("left");
-                        CHANNLE.send(Direction::Left).await;
-                    }
-                    [1, 1] => {
-                        info!("right");
-                        CHANNLE.send(Direction::Right).await;
-                    }
-                    _ => {}
-                }
-            }
-        }
-
+        // BluePill board has a pull-up resistor on the D+ line.
+        // Pull the D+ pin down to send a RESET condition to the USB bus.
+        // This forced reset is needed only for development, without it host
+        // will not reset your device when you upload new firmware.
+        let _dp = Output::new(p.PA12.clone_unchecked(), Level::Low, Speed::Low);
         Timer::after_millis(10).await;
     }
-}
 
-#[embassy_executor::task]
-async fn btn_push_hign(btn_pin: PA5) {
-    let btn = Input::new(btn_pin, embassy_stm32::gpio::Pull::Up);
+    // Create the driver, from the HAL.
+    let driver = Driver::new(p.USB, Irqs, p.PA12, p.PA11);
 
-    loop {
-        if btn.is_low() {
-            unsafe {
-                if CMD_BUF_IDX >= CMD_BUF.len() {
-                    continue;
-                }
-                info!("add high");
-                CMD_BUF[CMD_BUF_IDX] = 1;
-                CMD_BUF_IDX += 1;
-                while btn.is_low() {}
-            }
-        }
-        Timer::after_millis(10).await;
-    }
-}
-#[embassy_executor::task]
-async fn btn_push_low(btn_pin: PA6) {
-    let btn = Input::new(btn_pin, embassy_stm32::gpio::Pull::Up);
+    // Create embassy-usb Config
+    let config = embassy_usb::Config::new(0x1234, 0xcafe);
+    //config.max_packet_size_0 = 64;
 
-    loop {
-        if btn.is_low() {
-            unsafe {
-                if CMD_BUF_IDX >= CMD_BUF.len() {
-                    continue;
-                }
-                info!("add low");
-                CMD_BUF[CMD_BUF_IDX] = 0;
-                CMD_BUF_IDX += 1;
-                while btn.is_low() {}
-            }
-        }
-        Timer::after_millis(10).await;
-    }
-}
+    // Create embassy-usb DeviceBuilder using the driver and config.
+    // It needs some buffers for building the descriptors.
+    let mut config_descriptor = [0; 256];
+    let mut bos_descriptor = [0; 256];
+    let mut control_buf = [0; 7];
 
-#[embassy_executor::task]
-async fn exectuor_t(
-    mut sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5>,
-) {
-    loop {
-        let msg = sub.next_message_pure().await;
-        if msg == 1 {
-            info!("exec!!!");
-        }
-    }
-}
+    let mut state = State::new();
 
-#[embassy_executor::task]
-async fn led_denote(
-    led: PC13,
-    mut sub: embassy_sync::pubsub::Subscriber<'static, NoopRawMutex, i32, 5, 5, 5>,
-) {
-    let mut led = Output::new(
-        led,
-        embassy_stm32::gpio::Level::High,
-        embassy_stm32::gpio::Speed::Medium,
+    let mut builder = Builder::new(
+        driver,
+        config,
+        &mut config_descriptor,
+        &mut bos_descriptor,
+        &mut [], // no msos descriptors
+        &mut control_buf,
     );
-    loop {
-        let msg = sub.next_message_pure().await;
-        if msg == 1 {
-            led.set_low();
-        } else {
-            led.set_high();
-        }
-    }
-}
 
-#[embassy_executor::task]
-async fn pub_handle_btn_push(
-    p: embassy_sync::pubsub::Publisher<'static, NoopRawMutex, i32, 5, 5, 5>,
-    pin: PB0,
-) {
-    let pin = Input::new(pin, embassy_stm32::gpio::Pull::Up);
-    loop {
-        if pin.is_low() {
-            info!("push!");
-            p.publish(1).await;
-            while pin.is_low() {
-                Timer::after_millis(1).await;
-            }
-            p.publish(0).await;
-        }
-        Timer::after_millis(100).await;
-    }
-}
+    // Create classes on the builder.
+    let mut class = CdcAcmClass::new(&mut builder, &mut state, 64);
 
-#[embassy_executor::task]
-async fn receiver() {
-    loop {
-        unsafe {
-            let a = CHANNEL.receive().await;
-            info!("receivec {}", a);
-        }
-    }
-}
+    // Build the builder.
+    let mut usb = builder.build();
 
-#[embassy_executor::task]
-async fn catch_input(pin: PB0) {
-    let pin = Input::new(pin, embassy_stm32::gpio::Pull::Up);
-    loop {
-        if pin.is_low() {
-            info!("push!");
-            unsafe {
-                CHANNEL2.send(1).await;
-            }
-            while pin.is_low() {
-                Timer::after_millis(1).await;
-            }
-            unsafe {
-                CHANNEL2.send(0).await;
-            }
-        }
-        Timer::after_millis(100).await;
-    }
-}
-#[embassy_executor::task]
-async fn pwn(pwm_pin: PA8, tim: TIM1) {
-    let pwn = PwmPin::new_ch1(pwm_pin, embassy_stm32::gpio::OutputType::PushPull);
-    let mut pwm = SimplePwm::new(
-        tim,
-        Some(pwn),
-        None,
-        None,
-        None,
-        Hertz(10_1000),
-        Default::default(),
-    );
-    let mut ch1 = pwm.ch1();
-    ch1.enable();
-    info!("PWM iniialized!");
-    info!("PWM max duty {}", ch1.max_duty_cycle());
-    loop {
-        // ch1.set_duty_cycle_fully_off();
-        // Timer::after_millis(300).await;
-        // ch1.set_duty_cycle_fraction(1, 4);
-        // Timer::after_millis(300).await;
-        // ch1.set_duty_cycle_fraction(1, 2);
-        // Timer::after_millis(300).await;
-        // ch1.set_duty_cycle(ch1.max_duty_cycle() - 1);
-        // Timer::after_millis(300).await;
-        for i in 3..ch1.max_duty_cycle() {
-            ch1.set_duty_cycle(i);
-            unsafe {
-                CHANNEL.send(i as u32).await;
-            }
-            Timer::after_millis(20).await;
-        }
-        for i in (3..ch1.max_duty_cycle()).rev() {
-            ch1.set_duty_cycle(i);
-            Timer::after_millis(10).await;
-        }
-    }
-}
-#[embassy_executor::task]
-async fn pc13_receiver(pin: PC13) {
-    let mut out = Output::new(
-        pin,
-        embassy_stm32::gpio::Level::High,
-        embassy_stm32::gpio::Speed::Medium,
-    );
-    loop {
-        unsafe {
-            let res = CHANNEL2.receive().await;
-            if res == 1 {
-                info!("set high");
-                out.set_low();
-            } else {
-                out.set_high();
-                info!("set low");
-            }
-        }
-    }
-}
+    // Run the USB device.
+    let usb_fut = usb.run();
 
-#[embassy_executor::task]
-async fn adc(adc_port: ADC1, mut pin: PA0) {
-    let mut adc = Adc::new(adc_port);
-    let mut vrefint = adc.enable_vref();
-    let varify_sample = adc.read(&mut vrefint).await;
-    let convert_to_millivolts = |sample| {
-        // From http://www.st.com/resource/en/datasheet/CD00161566.pdf
-        // 5.3.4 Embedded reference voltage
-        const VREFINT_MV: u32 = 1200; // mV
-
-        (u32::from(sample) * VREFINT_MV / u32::from(varify_sample)) as u16
+    // Do stuff with the class!
+    let echo_fut = async {
+        loop {
+            info!("waitting for connection!");
+            class.wait_connection().await;
+            info!("Connected");
+            let _ = echo(&mut class).await;
+            info!("Disconnected");
+        }
     };
-    info!("start detecting");
-    loop {
-        let v = adc.read(&mut pin).await;
-        info!("--> {} - {} mV", v, convert_to_millivolts(v));
-        Timer::after_millis(100).await;
+
+    // Run everything concurrently.
+    // If we had made everything `'static` above instead, we could do this using separate tasks instead.
+    join(usb_fut, echo_fut).await;
+}
+
+struct Disconnected {}
+
+impl From<EndpointError> for Disconnected {
+    fn from(val: EndpointError) -> Self {
+        match val {
+            EndpointError::BufferOverflow => panic!("Buffer overflow"),
+            EndpointError::Disabled => Disconnected {},
+        }
     }
 }
 
-#[embassy_executor::task]
-async fn ipt(gpio: peripherals::PB13, mut led: Output<'static>) {
-    let ipt = Input::new(gpio, embassy_stm32::gpio::Pull::Up);
-    let mut shinning = false;
+async fn echo<'d, T: Instance + 'd>(
+    class: &mut CdcAcmClass<'d, Driver<'d, T>>,
+) -> Result<(), Disconnected> {
+    let mut buf = [0; 64];
     loop {
-        Timer::after_millis(300).await;
-        if ipt.is_low() {
-            info!("touched!");
-            shinning = !shinning;
-            if shinning {
-                led.set_high();
-            } else {
-                led.set_low();
-            }
-            Timer::after_millis(500).await;
-        }
+        let n = class.read_packet(&mut buf).await?;
+        let data = &buf[..n];
+        info!("data: {:x}", data);
+        class.write_packet(b"hello").await?;
     }
 }
