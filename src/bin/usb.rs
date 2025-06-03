@@ -35,11 +35,13 @@
 // }
 use defmt::{panic, *};
 use embassy_executor::Spawner;
-use embassy_futures::join::join;
 use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::peripherals::PC13;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usb::{Driver, Instance};
 use embassy_stm32::{Config, Peripheral, bind_interrupts, peripherals, usb};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_time::Timer;
 use embassy_usb::Builder;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
@@ -50,6 +52,8 @@ bind_interrupts!(struct Irqs {
     USB_LP_CAN1_RX0 => usb::InterruptHandler<peripherals::USB>;
 });
 static mut STATE: Option<State> = None;
+static mut CHANNLE_RESPONSE: Channel<NoopRawMutex, u8, 1> = Channel::<NoopRawMutex, u8, 1>::new();
+static mut CHANNLE_OPERATION: Channel<NoopRawMutex, u8, 8> = Channel::<NoopRawMutex, u8, 8>::new();
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -101,8 +105,7 @@ async fn main(_spawner: Spawner) {
 
     unsafe {
         STATE = Some(state);
-
-        let mut builder = Builder::new(
+        let mut builder: Builder<'_, Driver<'static, peripherals::USB>> = Builder::new(
             driver,
             config,
             &mut config_descriptor,
@@ -112,31 +115,51 @@ async fn main(_spawner: Spawner) {
         );
 
         // Create classes on the builder.
-        let mut class = CdcAcmClass::new(&mut builder, STATE.as_mut().unwrap(), 64);
+        let class = CdcAcmClass::new(&mut builder, STATE.as_mut().unwrap(), 64);
+        let usb: embassy_usb::UsbDevice<'_, Driver<'static, peripherals::USB>> = builder.build();
 
-        // Build the builder.
-        let mut usb = builder.build();
-
-        // Run the USB device.
-        let usb_fut = usb.run();
-
-        // Do stuff with the class!
-        let echo_fut = async {
-            loop {
-                info!("waitting for connection!");
-                class.wait_connection().await;
-                info!("Connected");
-                let _ = echo(&mut class).await;
-                info!("Disconnected");
-            }
-        };
-
-        // Run everything concurrently.
-        // If we had made everything `'static` above instead, we could do this using separate tasks instead.
-        join(usb_fut, echo_fut).await;
+        _spawner.spawn(usb_run(usb)).unwrap();
+        Timer::after_millis(100).await;
+        _spawner.spawn(usb_function(class)).unwrap();
+        _spawner.spawn(led_work(p.PC13)).unwrap();
+        loop {
+            Timer::after_secs(1).await;
+        }
     }
 }
 
+#[embassy_executor::task]
+async fn led_work(led: PC13) {
+    let mut led = Output::new(led, Level::High, Speed::Medium);
+    info!("led initiate!");
+    unsafe {
+        loop {
+            let cmd = CHANNLE_OPERATION.receive().await;
+            if cmd == 0xff {
+                led.set_low();
+            } else {
+                led.set_high();
+            }
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn usb_function(mut class: CdcAcmClass<'static, Driver<'static, peripherals::USB>>) {
+    info!("usb_function initiate!");
+    loop {
+        class.wait_connection().await;
+        let _ = function(&mut class).await;
+        info!("disconnect")
+    }
+}
+
+#[embassy_executor::task]
+async fn usb_run(mut usb: embassy_usb::UsbDevice<'static, Driver<'static, peripherals::USB>>) {
+    usb.run().await
+}
+
+//used for disconnection
 struct Disconnected {}
 
 impl From<EndpointError> for Disconnected {
@@ -148,14 +171,21 @@ impl From<EndpointError> for Disconnected {
     }
 }
 
-async fn echo<'d, T: Instance + 'd>(
+async fn function<'d, T: Instance + 'd>(
     class: &mut CdcAcmClass<'d, Driver<'d, T>>,
 ) -> Result<(), Disconnected> {
     let mut buf = [0; 64];
     loop {
         let n = class.read_packet(&mut buf).await?;
         let data = &buf[..n];
-        info!("data: {:x}", data);
-        class.write_packet(b"hello").await?;
+        class.write_packet(&[data[0]]).await?;
+        // info!("send");
+        unsafe {
+            CHANNLE_OPERATION.send(data[0]).await;
+        }
+        // info!("send ok");
+        // Timer::after_secs(1).await;
+        // info!("data: {:x}", data);
+        // class.write_packet(b"OK").await?;
     }
 }
