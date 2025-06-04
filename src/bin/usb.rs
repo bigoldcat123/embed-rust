@@ -36,12 +36,14 @@
 use defmt::{panic, *};
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::mode::{Async, Mode};
 use embassy_stm32::peripherals::PC13;
 use embassy_stm32::time::Hertz;
+use embassy_stm32::usart::{self, Uart};
 use embassy_stm32::usb::{Driver, Instance};
 use embassy_stm32::{Config, Peripheral, bind_interrupts, peripherals, usb};
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::channel::Channel;
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::Timer;
 use embassy_usb::Builder;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
@@ -50,10 +52,27 @@ use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
     USB_LP_CAN1_RX0 => usb::InterruptHandler<peripherals::USB>;
+    USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
+
 static mut STATE: Option<State> = None;
-static mut CHANNLE_RESPONSE: Channel<NoopRawMutex, u8, 1> = Channel::<NoopRawMutex, u8, 1>::new();
-static mut CHANNLE_OPERATION: Channel<NoopRawMutex, u8, 8> = Channel::<NoopRawMutex, u8, 8>::new();
+static COMMAND_CHANNEL: Channel<ThreadModeRawMutex, [u8; 64], 5> =
+    Channel::<ThreadModeRawMutex, [u8; 64], 5>::new();
+static mut CHANNLE_OPERATION: Channel<ThreadModeRawMutex, u8, 8> =
+    Channel::<ThreadModeRawMutex, u8, 8>::new();
+
+struct UartPart {
+    uart: Uart<'static, Async>,
+    revicer: Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
+}
+impl UartPart {
+    fn new(
+        uart: Uart<'static, Async>,
+        revicer: Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
+    ) -> Self {
+        Self { uart, revicer }
+    }
+}
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -87,7 +106,10 @@ async fn main(_spawner: Spawner) {
         let _dp = Output::new(p.PA12.clone_unchecked(), Level::Low, Speed::Low);
         Timer::after_millis(10).await;
     }
-
+    let mut cfg: embassy_stm32::usart::Config = Default::default();
+    cfg.baudrate = 9600;
+    let uart = Uart::new(p.USART1, p.PA10, p.PA9, Irqs, p.DMA1_CH4, p.DMA1_CH5, cfg).unwrap();
+    let part = UartPart::new(uart, COMMAND_CHANNEL.receiver());
     // Create the driver, from the HAL.
     let driver: Driver<'static, peripherals::USB> = Driver::new(p.USB, Irqs, p.PA12, p.PA11);
 
@@ -118,10 +140,14 @@ async fn main(_spawner: Spawner) {
         let class = CdcAcmClass::new(&mut builder, STATE.as_mut().unwrap(), 64);
         let usb: embassy_usb::UsbDevice<'_, Driver<'static, peripherals::USB>> = builder.build();
 
+        let sender: embassy_sync::channel::Sender<'static, ThreadModeRawMutex, u8, 8> =
+            CHANNLE_OPERATION.sender();
+        let receiver: embassy_sync::channel::Receiver<'static, ThreadModeRawMutex, u8, 8> =
+            CHANNLE_OPERATION.receiver();
         _spawner.spawn(usb_run(usb)).unwrap();
         Timer::after_millis(100).await;
-        _spawner.spawn(usb_function(class)).unwrap();
-        _spawner.spawn(led_work(p.PC13)).unwrap();
+        _spawner.spawn(usb_function(class, sender)).unwrap();
+        _spawner.spawn(led_work(p.PC13, receiver)).unwrap();
         loop {
             Timer::after_secs(1).await;
         }
@@ -129,27 +155,28 @@ async fn main(_spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn led_work(led: PC13) {
+async fn led_work(led: PC13, reciver: Receiver<'static, ThreadModeRawMutex, u8, 8>) {
     let mut led = Output::new(led, Level::High, Speed::Medium);
     info!("led initiate!");
-    unsafe {
-        loop {
-            let cmd = CHANNLE_OPERATION.receive().await;
-            if cmd == 0xff {
-                led.set_low();
-            } else {
-                led.set_high();
-            }
+    loop {
+        let cmd = reciver.receive().await;
+        if cmd == 0xff {
+            led.set_low();
+        } else {
+            led.set_high();
         }
     }
 }
 
 #[embassy_executor::task]
-async fn usb_function(mut class: CdcAcmClass<'static, Driver<'static, peripherals::USB>>) {
+async fn usb_function(
+    mut class: CdcAcmClass<'static, Driver<'static, peripherals::USB>>,
+    sender: Sender<'static, ThreadModeRawMutex, u8, 8>,
+) {
     info!("usb_function initiate!");
     loop {
         class.wait_connection().await;
-        let _ = function(&mut class).await;
+        let _ = function(&mut class, &sender).await;
         info!("disconnect")
     }
 }
@@ -173,19 +200,13 @@ impl From<EndpointError> for Disconnected {
 
 async fn function<'d, T: Instance + 'd>(
     class: &mut CdcAcmClass<'d, Driver<'d, T>>,
+    sender: &Sender<'static, ThreadModeRawMutex, u8, 8>,
 ) -> Result<(), Disconnected> {
     let mut buf = [0; 64];
     loop {
         let n = class.read_packet(&mut buf).await?;
         let data = &buf[..n];
-        class.write_packet(&[data[0]]).await?;
-        // info!("send");
-        unsafe {
-            CHANNLE_OPERATION.send(data[0]).await;
-        }
-        // info!("send ok");
-        // Timer::after_secs(1).await;
-        // info!("data: {:x}", data);
-        // class.write_packet(b"OK").await?;
+        class.write_packet(data).await?;
+        sender.send(data[0]).await;
     }
 }

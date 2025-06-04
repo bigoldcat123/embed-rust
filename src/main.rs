@@ -40,6 +40,8 @@ use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usb::{Driver, Instance};
 use embassy_stm32::{Config, Peripheral, bind_interrupts, peripherals, usb};
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::channel::{self, Channel};
 use embassy_time::Timer;
 use embassy_usb::Builder;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
@@ -131,6 +133,8 @@ async fn main(_spawner: Spawner) {
             }
         };
 
+
+        
         // Run everything concurrently.
         // If we had made everything `'static` above instead, we could do this using separate tasks instead.
         join(usb_fut, echo_fut).await;
