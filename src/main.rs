@@ -133,8 +133,6 @@ async fn main(_spawner: Spawner) {
             }
         };
 
-
-        
         // Run everything concurrently.
         // If we had made everything `'static` above instead, we could do this using separate tasks instead.
         join(usb_fut, echo_fut).await;

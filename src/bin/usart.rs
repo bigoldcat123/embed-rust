@@ -1,7 +1,6 @@
-
 #![no_std]
 #![no_main]
-use defmt::info;
+use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_stm32::{
     mode::Async,
@@ -23,16 +22,27 @@ async fn main(_spawner: Spawner) {
     let (mut tx, rx) = uart.split();
     _spawner.spawn(read(rx)).unwrap();
     loop {
-        tx.write("format hello".as_bytes()).await.unwrap();
+        info!("send!");
+        tx.write("AT\n".as_bytes()).await.unwrap();
         Timer::after_secs(1).await;
     }
 }
 
 #[embassy_executor::task]
 async fn read(mut rx: UartRx<'static, Async>) {
-    let mut buf = [0];
+    let mut buf = [0; 1];
+    let mut real_buf = [0; 64];
+    let mut idx = 0;
     loop {
-        rx.read(&mut buf).await.unwrap();
-        info!("read < {} >", buf[0] as char);
+        if let Ok(e) = rx.read(&mut buf).await {
+            real_buf[idx] = buf[0];
+            idx += 1;
+            if buf[0] == 10 {
+                idx = 0;
+                info!("read < {:?} >", real_buf);
+            }
+        } else {
+            error!("ggg");
+        }
     }
 }

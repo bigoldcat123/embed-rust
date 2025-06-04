@@ -36,7 +36,7 @@
 use defmt::{panic, *};
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
-use embassy_stm32::mode::{Async, Mode};
+use embassy_stm32::mode::Async;
 use embassy_stm32::peripherals::PC13;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usart::{self, Uart};
@@ -58,19 +58,25 @@ bind_interrupts!(struct Irqs {
 static mut STATE: Option<State> = None;
 static COMMAND_CHANNEL: Channel<ThreadModeRawMutex, [u8; 64], 5> =
     Channel::<ThreadModeRawMutex, [u8; 64], 5>::new();
-static mut CHANNLE_OPERATION: Channel<ThreadModeRawMutex, u8, 8> =
-    Channel::<ThreadModeRawMutex, u8, 8>::new();
+static USART_RESPONSE: Channel<ThreadModeRawMutex, [u8; 64], 5> =
+    Channel::<ThreadModeRawMutex, [u8; 64], 5>::new();
 
 struct UartPart {
     uart: Uart<'static, Async>,
     revicer: Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
+    sender: Sender<'static, ThreadModeRawMutex, [u8; 64], 5>,
 }
 impl UartPart {
     fn new(
         uart: Uart<'static, Async>,
         revicer: Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
+        sender: Sender<'static, ThreadModeRawMutex, [u8; 64], 5>,
     ) -> Self {
-        Self { uart, revicer }
+        Self {
+            uart,
+            revicer,
+            sender,
+        }
     }
 }
 
@@ -109,7 +115,7 @@ async fn main(_spawner: Spawner) {
     let mut cfg: embassy_stm32::usart::Config = Default::default();
     cfg.baudrate = 9600;
     let uart = Uart::new(p.USART1, p.PA10, p.PA9, Irqs, p.DMA1_CH4, p.DMA1_CH5, cfg).unwrap();
-    let part = UartPart::new(uart, COMMAND_CHANNEL.receiver());
+    let part = UartPart::new(uart, COMMAND_CHANNEL.receiver(), USART_RESPONSE.sender());
     // Create the driver, from the HAL.
     let driver: Driver<'static, peripherals::USB> = Driver::new(p.USB, Irqs, p.PA12, p.PA11);
 
@@ -140,14 +146,21 @@ async fn main(_spawner: Spawner) {
         let class = CdcAcmClass::new(&mut builder, STATE.as_mut().unwrap(), 64);
         let usb: embassy_usb::UsbDevice<'_, Driver<'static, peripherals::USB>> = builder.build();
 
-        let sender: embassy_sync::channel::Sender<'static, ThreadModeRawMutex, u8, 8> =
-            CHANNLE_OPERATION.sender();
-        let receiver: embassy_sync::channel::Receiver<'static, ThreadModeRawMutex, u8, 8> =
-            CHANNLE_OPERATION.receiver();
+        // let sender: embassy_sync::channel::Sender<'static, ThreadModeRawMutex, u8, 8> =
+        //     CHANNLE_OPERATION.sender();
+        // let receiver: embassy_sync::channel::Receiver<'static, ThreadModeRawMutex, u8, 8> =
+        //     CHANNLE_OPERATION.receiver();
+        _spawner.spawn(usart_work(part)).unwrap();
         _spawner.spawn(usb_run(usb)).unwrap();
         Timer::after_millis(100).await;
-        _spawner.spawn(usb_function(class, sender)).unwrap();
-        _spawner.spawn(led_work(p.PC13, receiver)).unwrap();
+        _spawner
+            .spawn(usb_function(
+                class,
+                COMMAND_CHANNEL.sender(),
+                USART_RESPONSE.receiver(),
+            ))
+            .unwrap();
+        // _spawner.spawn(led_work(p.PC13, receiver)).unwrap();
         loop {
             Timer::after_secs(1).await;
         }
@@ -155,28 +168,52 @@ async fn main(_spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn led_work(led: PC13, reciver: Receiver<'static, ThreadModeRawMutex, u8, 8>) {
-    let mut led = Output::new(led, Level::High, Speed::Medium);
-    info!("led initiate!");
+async fn usart_work(mut uart: UartPart) {
+    info!("usart working");
     loop {
-        let cmd = reciver.receive().await;
-        if cmd == 0xff {
-            led.set_low();
-        } else {
-            led.set_high();
+        let mut buf = [0; 1];
+        let mut real_buf = [0; 64];
+        let mut idx = 0;
+        let cmd = uart.revicer.receive().await;
+        let mut idx = 0;
+        for i in 0..cmd.len() {
+            if cmd[i] == b'\n' {
+                idx = i;
+                break;
+            }
         }
+        info!("receive {:?}", &cmd[0..=idx]);
+
+        uart.uart.write(&cmd[0..=idx]).await.unwrap();
+        loop {
+            uart.uart.read(&mut buf).await.unwrap();
+            real_buf[idx] = buf[0];
+            idx += 1;
+            if buf[0] == 10 {
+                break;
+            }
+        }
+        info!("{:?}", real_buf);
+        uart.sender.send(real_buf).await;
     }
 }
 
 #[embassy_executor::task]
 async fn usb_function(
     mut class: CdcAcmClass<'static, Driver<'static, peripherals::USB>>,
-    sender: Sender<'static, ThreadModeRawMutex, u8, 8>,
+    sender: Sender<'static, ThreadModeRawMutex, [u8; 64], 5>,
+    receiver: Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
 ) {
     info!("usb_function initiate!");
+    let mut a = [0; 64];
+    a[0] = b'A';
+    a[1] = b'T';
+    a[2] = b'\n';
+    sender.send(a).await;
+    info!("sender send!");
     loop {
         class.wait_connection().await;
-        let _ = function(&mut class, &sender).await;
+        let _ = function(&mut class, &sender, &receiver).await;
         info!("disconnect")
     }
 }
@@ -200,13 +237,29 @@ impl From<EndpointError> for Disconnected {
 
 async fn function<'d, T: Instance + 'd>(
     class: &mut CdcAcmClass<'d, Driver<'d, T>>,
-    sender: &Sender<'static, ThreadModeRawMutex, u8, 8>,
+    sender: &Sender<'static, ThreadModeRawMutex, [u8; 64], 5>,
+    responder: &Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
 ) -> Result<(), Disconnected> {
-    let mut buf = [0; 64];
     loop {
+        let mut buf = [0; 64];
+
         let n = class.read_packet(&mut buf).await?;
-        let data = &buf[..n];
-        class.write_packet(data).await?;
-        sender.send(data[0]).await;
+        sender.send(buf).await;
+        let data = responder.receive().await;
+        class.write_packet(&data).await?;
     }
 }
+
+// #[embassy_executor::task]
+// async fn led_work(led: PC13, reciver: Receiver<'static, ThreadModeRawMutex, u8, 8>) {
+//     let mut led = Output::new(led, Level::High, Speed::Medium);
+//     info!("led initiate!");
+//     loop {
+//         let cmd = reciver.receive().await;
+//         if cmd == 0xff {
+//             led.set_low();
+//         } else {
+//             led.set_high();
+//         }
+//     }
+// }
