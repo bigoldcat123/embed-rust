@@ -175,7 +175,6 @@ async fn usart_work(mut uart: UartPart) {
         let mut real_buf = [0; 64];
         let mut idx = 0;
         let cmd = uart.revicer.receive().await;
-        let mut idx = 0;
         for i in 0..cmd.len() {
             if cmd[i] == b'\n' {
                 idx = i;
@@ -185,6 +184,7 @@ async fn usart_work(mut uart: UartPart) {
         info!("receive {:?}", &cmd[0..=idx]);
 
         uart.uart.write(&cmd[0..=idx]).await.unwrap();
+        idx = 0;
         loop {
             uart.uart.read(&mut buf).await.unwrap();
             if buf[0] == 0 {
@@ -248,9 +248,12 @@ async fn function<'d, T: Instance + 'd>(
         let mut buf = [0; 64];
 
         let n = class.read_packet(&mut buf).await?;
-        sender.send(buf).await;
-        let data = responder.receive().await;
-        class.write_packet(&data[..32]).await?;
+        info!("{}", &buf[..n]);
+        // TODO
+        // sender.send(buf).await;
+        // let data = responder.receive().await;
+        // class.write_packet(&data[..32]).await?;
+        class.write_packet(&buf[..n]).await?;
     }
 }
 
