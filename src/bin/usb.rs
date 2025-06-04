@@ -187,6 +187,9 @@ async fn usart_work(mut uart: UartPart) {
         uart.uart.write(&cmd[0..=idx]).await.unwrap();
         loop {
             uart.uart.read(&mut buf).await.unwrap();
+            if buf[0] == 0 {
+                continue;
+            }
             real_buf[idx] = buf[0];
             idx += 1;
             if buf[0] == 10 {
@@ -205,12 +208,13 @@ async fn usb_function(
     receiver: Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
 ) {
     info!("usb_function initiate!");
-    let mut a = [0; 64];
-    a[0] = b'A';
-    a[1] = b'T';
-    a[2] = b'\n';
-    sender.send(a).await;
-    info!("sender send!");
+    // let mut a = [0; 64];
+    // a[0] = b'A';
+    // a[1] = b'T';
+    // a[2] = b'\n';
+
+    // sender.send(a).await;
+    // info!("sender send!");
     loop {
         class.wait_connection().await;
         let _ = function(&mut class, &sender, &receiver).await;
@@ -246,7 +250,7 @@ async fn function<'d, T: Instance + 'd>(
         let n = class.read_packet(&mut buf).await?;
         sender.send(buf).await;
         let data = responder.receive().await;
-        class.write_packet(&data).await?;
+        class.write_packet(&data[..32]).await?;
     }
 }
 
