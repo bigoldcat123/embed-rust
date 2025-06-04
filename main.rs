@@ -26,6 +26,7 @@ async fn main() {
         out.write_all(b">").unwrap();
         out.flush().unwrap();
         in_.read_line(&mut cmd).unwrap();
+        println!("{:?}",cmd.as_bytes());
         interface
             .bulk_out(0x02, cmd.into_bytes())
             .await

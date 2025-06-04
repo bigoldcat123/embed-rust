@@ -20,7 +20,7 @@ impl UsbReader {
                 .await
                 .into_result()
                 .unwrap();
-            println!("{:?}", String::from_utf8_lossy(data.as_ref()));
+            println!("{}", String::from_utf8_lossy(data.as_ref()).trim());
             self.complete_handle.send(1).await.unwrap();
         }
     }
