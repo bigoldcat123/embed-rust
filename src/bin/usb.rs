@@ -35,9 +35,9 @@
 // }
 use defmt::{panic, *};
 use embassy_executor::Spawner;
+use embassy_futures::select::{self, Either, select};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::mode::Async;
-use embassy_stm32::peripherals::PC13;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usart::{self, Uart};
 use embassy_stm32::usb::{Driver, Instance};
@@ -60,6 +60,10 @@ static COMMAND_CHANNEL: Channel<ThreadModeRawMutex, [u8; 64], 5> =
     Channel::<ThreadModeRawMutex, [u8; 64], 5>::new();
 static USART_RESPONSE: Channel<ThreadModeRawMutex, [u8; 64], 5> =
     Channel::<ThreadModeRawMutex, [u8; 64], 5>::new();
+
+static mut CONFIG_DESCRIPTOR: [u8; 256] = [0; 256];
+static mut BOS_DESCRIPTOR: [u8; 256] = [0; 256];
+static mut CONTROL_BUF: [u8; 7] = [0; 7];
 
 struct UartPart {
     uart: Uart<'static, Async>,
@@ -125,9 +129,6 @@ async fn main(_spawner: Spawner) {
 
     // Create embassy-usb DeviceBuilder using the driver and config.
     // It needs some buffers for building the descriptors.
-    static mut config_descriptor: [u8; 256] = [0; 256];
-    static mut bos_descriptor: [u8; 256] = [0; 256];
-    static mut control_buf: [u8; 7] = [0; 7];
 
     let state = State::new();
 
@@ -136,10 +137,10 @@ async fn main(_spawner: Spawner) {
         let mut builder: Builder<'_, Driver<'static, peripherals::USB>> = Builder::new(
             driver,
             config,
-            &mut config_descriptor,
-            &mut bos_descriptor,
+            &mut CONFIG_DESCRIPTOR,
+            &mut BOS_DESCRIPTOR,
             &mut [], // no msos descriptors
-            &mut control_buf,
+            &mut CONTROL_BUF,
         );
 
         // Create classes on the builder.
@@ -208,13 +209,6 @@ async fn usb_function(
     receiver: Receiver<'static, ThreadModeRawMutex, [u8; 64], 5>,
 ) {
     info!("usb_function initiate!");
-    // let mut a = [0; 64];
-    // a[0] = b'A';
-    // a[1] = b'T';
-    // a[2] = b'\n';
-
-    // sender.send(a).await;
-    // info!("sender send!");
     loop {
         class.wait_connection().await;
         let _ = function(&mut class, &sender, &receiver).await;
@@ -250,10 +244,32 @@ async fn function<'d, T: Instance + 'd>(
         let n = class.read_packet(&mut buf).await?;
         info!("{}", &buf[..n]);
         // TODO
-        // sender.send(buf).await;
-        // let data = responder.receive().await;
+        sender.send(buf).await;
+        let r = select(
+            async {
+                Timer::after_secs(1).await;
+                ()
+            },
+            async {
+                let data = responder.receive().await;
+                class.write_packet(&data[..n]).await?;
+                info!("write packet: {:?}", &data[..n]);
+                Ok::<(), Disconnected>(())
+            },
+        )
+        .await;
+        match r {
+            Either::First(_) => {
+                info!("Timeout, disconnecting");
+                class.write_packet("e no such command".as_bytes()).await?;
+            }
+            Either::Second(_) => {
+                info!("Write successful");
+            }
+        }
+
         // class.write_packet(&data[..32]).await?;
-        class.write_packet(&buf[..n]).await?;
+        // class.write_packet(&buf[..n]).await?;
     }
 }
 
