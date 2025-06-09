@@ -32,11 +32,15 @@ async fn main(spawner: Spawner) {
 
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
     esp_hal_embassy::init(timer0.alarm0);
-    let mut led = Output::new(peripherals.GPIO7, esp_hal::gpio::Level::Low, Default::default());
+    let mut led = Output::new(
+        peripherals.GPIO7,
+        esp_hal::gpio::Level::Low,
+        Default::default(),
+    );
     info!("Embassy initialized!");
     // TODO: Spawn some tasks
-    let _ = spawner;
 
+    let _ = spawner;
     loop {
         info!("Hello world!");
         Timer::after(Duration::from_secs(1)).await;
