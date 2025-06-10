@@ -10,7 +10,7 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
-use esp_hal::gpio::Output;
+use esp_hal::gpio::{Output, OutputConfig};
 use esp_hal::timer::systimer::SystemTimer;
 use esp_println as _;
 
@@ -39,7 +39,6 @@ async fn main(spawner: Spawner) {
     );
     info!("Embassy initialized!");
     // TODO: Spawn some tasks
-
     let _ = spawner;
     loop {
         info!("Hello world!");
