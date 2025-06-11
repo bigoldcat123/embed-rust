@@ -5,29 +5,28 @@
     reason = "mem::forget is generally not safe to do with esp_hal types, especially those \
     holding buffers for the duration of a data transfer."
 )]
+#![allow(static_mut_refs)]
+// use alloc::string::String;
 
 use core::net::Ipv4Addr;
 
-use alloc::{
-    boxed::Box,
-    string::String,
-    vec::{self, Vec},
-};
-use defmt::{error, info};
+use defmt::{error, info, println};
 use embassy_executor::Spawner;
 use embassy_net::{
-    tcp::{TcpReader, TcpSocket},
-    Runner, StackResources,
+    tcp::{TcpReader, TcpSocket, TcpWriter},
+    StackResources,
 };
 use embassy_time::{Duration, Timer};
-use esp_hal::clock::CpuClock;
-use esp_hal::timer::systimer::SystemTimer;
+use embedded_io_async::Write;
+use esp32_wifi::{connection, net_task};
 use esp_hal::timer::timg::TimerGroup;
-use esp_println as _;
-use esp_wifi::{
-    wifi::{ClientConfiguration, Configuration, WifiController, WifiDevice, WifiEvent, WifiState},
-    EspWifiController,
+use esp_hal::{
+    clock::CpuClock,
+    gpio::{Input, InputConfig},
 };
+use esp_hal::{peripherals::GPIO6, timer::systimer::SystemTimer};
+use esp_println as _;
+use esp_wifi::EspWifiController;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -57,7 +56,6 @@ async fn main(spawner: Spawner) {
     // generator version: 0.4.0
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
-
     esp_alloc::heap_allocator!(size: 64 * 1024); //64K
 
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
@@ -89,8 +87,8 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(net_task(runner)).ok();
 
-    let mut rx_buffer = [0; 4096];
-    let mut tx_buffer = [0; 4096];
+    static mut rx_buffer: [u8; 4096] = [0; 4096];
+    static mut tx_buffer: [u8; 4096] = [0; 4096];
 
     loop {
         if stack.is_link_up() {
@@ -109,99 +107,61 @@ async fn main(spawner: Spawner) {
         Timer::after(Duration::from_millis(500)).await;
     }
 
-    loop {
+    unsafe {
         Timer::after(Duration::from_secs(1)).await;
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(embassy_time::Duration::from_secs(10))); //192.168.38.234
+        let socket = mk_static!(
+            TcpSocket<'static>,
+            TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer)
+        );
+
+        // let mut socket: TcpSocket<'static> = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+        socket.set_timeout(Some(embassy_time::Duration::from_secs(60))); //192.168.38.234
+        socket.set_keep_alive(Some(embassy_time::Duration::from_secs(3)));
         let remote_endpoint = (Ipv4Addr::new(192, 168, 38, 234), 8000);
         info!("connecting");
-        let r = socket.connect(remote_endpoint).await;
-        let a = socket.split();
-        if let Err(_) = r {
-            error!("connect error:");
-            continue;
-        }
+        let _ = socket.connect(remote_endpoint).await;
+        let (reader, writer) = socket.split();
+        spawner.spawn(writer_acrot(writer, peripherals.GPIO6)).ok();
+        spawner.spawn(read_actor(reader)).ok();
         info!("connected");
-        let mut buf = [0; 1024];
-
-        loop {
-            use embedded_io_async::Write;
-            let r = socket
-                .write_all(b"GET / HTTP/1.0\r\nHost: www.mobile-j.de\r\n\r\n")
-                .await;
-            if let Err(_) = r {
-                error!("write error:");
-                break;
-            }
-            let n = match socket.read(&mut buf).await {
-                Ok(0) => {
-                    info!("read EOF");
-                    break;
-                }
-                Ok(n) => n,
-                Err(e) => {
-                    error!("read error:");
-                    break;
-                }
-            };
-            info!("{}", core::str::from_utf8(&buf[..n]).unwrap());
-        }
+    }
+    loop {
         Timer::after(Duration::from_millis(3000)).await;
     }
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.1/examples/src/bin
 }
 #[embassy_executor::task]
+async fn writer_acrot(mut writer: TcpWriter<'static>, pin: GPIO6<'static>) {
+    let config = InputConfig::default().with_pull(esp_hal::gpio::Pull::Up);
+    let mut ipt = Input::new(pin, config);
+    info!("writer acrot ready");
+    loop {
+        ipt.wait_for(esp_hal::gpio::Event::FallingEdge).await;
+        info!("sending request");
+        match writer
+            .write_all(b"GET / HTTP/1.1\r\nConnection: keep-alive\r\nHost: www.mobile-j.de\r\n\r\n")
+            .await
+        {
+            Ok(_) => {}
+            Err(_) => {
+                error!("req error!");
+            }
+        }
+
+        Timer::after_secs(1).await;
+    }
+}
+#[embassy_executor::task]
 async fn read_actor(mut reader: TcpReader<'static>) {
     let mut buf = [0; 1024];
+    info!("reader acrot ready");
     while let Ok(len) = reader.read(&mut buf).await {
+        if len == 0 {
+            info!("NOTHING!");
+            Timer::after_secs(2).await;
+            break;
+        }
         info!("{}", core::str::from_utf8(&buf[..len]).unwrap());
     }
-}
-#[embassy_executor::task]
-async fn connection(mut controller: WifiController<'static>) {
-    info!("start connection task");
-    // info!("Device capabilities: {:?}", controller.capabilities());
-    loop {
-        match esp_wifi::wifi::wifi_state() {
-            WifiState::StaConnected => {
-                // wait until we're no longer connected
-                controller.wait_for_event(WifiEvent::StaDisconnected).await;
-                Timer::after(Duration::from_millis(5000)).await
-            }
-            _ => {}
-        }
-        if !matches!(controller.is_started(), Ok(true)) {
-            let client_config = Configuration::Client(ClientConfiguration {
-                ssid: String::from("ReDian"),
-                password: String::from("zdyyjs@123"),
-                ..Default::default()
-            });
-            controller.set_configuration(&client_config).unwrap();
-            info!("Starting wifi");
-            controller.start_async().await.unwrap();
-            info!("Wifi started!");
-
-            info!("Scan");
-            let result = controller.scan_n_async(10).await.unwrap();
-            for ap in result {
-                info!("{:?}", ap.ssid.as_str());
-                // info!("{:#?}", ap);
-            }
-        }
-        info!("About to connect...");
-
-        match controller.connect_async().await {
-            Ok(_) => info!("Wifi connected!"),
-            Err(e) => {
-                // info!("Failed to connect to wifi: {e:?}");
-                error!("Failed to connect to wifi:");
-                Timer::after(Duration::from_millis(5000)).await
-            }
-        }
-    }
-}
-
-#[embassy_executor::task]
-async fn net_task(mut runner: Runner<'static, WifiDevice<'static>>) {
-    runner.run().await
+    info!("connect G");
 }
