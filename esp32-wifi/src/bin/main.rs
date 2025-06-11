@@ -8,10 +8,17 @@
 
 use core::net::Ipv4Addr;
 
-use alloc::string::String;
+use alloc::{
+    boxed::Box,
+    string::String,
+    vec::{self, Vec},
+};
 use defmt::{error, info};
 use embassy_executor::Spawner;
-use embassy_net::{tcp::TcpSocket, Runner, StackResources};
+use embassy_net::{
+    tcp::{TcpReader, TcpSocket},
+    Runner, StackResources,
+};
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::timer::systimer::SystemTimer;
@@ -51,11 +58,10 @@ async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-    esp_alloc::heap_allocator!(size: 64 * 1024);
+    esp_alloc::heap_allocator!(size: 64 * 1024); //64K
 
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
     esp_hal_embassy::init(timer0.alarm0);
-
     let mut rng = esp_hal::rng::Rng::new(peripherals.RNG);
     let timer1 = TimerGroup::new(peripherals.TIMG0);
     // let wifi_init = esp_wifi::init(timer1.timer0, rng, peripherals.RADIO_CLK)
@@ -66,12 +72,11 @@ async fn main(spawner: Spawner) {
     // .expect("Failed to initialize WIFI/BLE controller");
     let (mut _wifi_controller, _interfaces) = esp_wifi::wifi::new(&wifi_init, peripherals.WIFI)
         .expect("Failed to initialize WIFI controller");
-    info!("hello");
 
     // TODO: Spawn some tasks
 
-
     let wifi_interface = _interfaces.sta;
+
     let config = embassy_net::Config::dhcpv4(Default::default());
     let seed = (rng.random() as u64) << 32 | rng.random() as u64;
     let (stack, runner) = embassy_net::new(
@@ -107,10 +112,11 @@ async fn main(spawner: Spawner) {
     loop {
         Timer::after(Duration::from_secs(1)).await;
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));//192.168.38.234
+        socket.set_timeout(Some(embassy_time::Duration::from_secs(10))); //192.168.38.234
         let remote_endpoint = (Ipv4Addr::new(192, 168, 38, 234), 8000);
         info!("connecting");
         let r = socket.connect(remote_endpoint).await;
+        let a = socket.split();
         if let Err(_) = r {
             error!("connect error:");
             continue;
@@ -142,10 +148,15 @@ async fn main(spawner: Spawner) {
         }
         Timer::after(Duration::from_millis(3000)).await;
     }
-
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.1/examples/src/bin
 }
-
+#[embassy_executor::task]
+async fn read_actor(mut reader: TcpReader<'static>) {
+    let mut buf = [0; 1024];
+    while let Ok(len) = reader.read(&mut buf).await {
+        info!("{}", core::str::from_utf8(&buf[..len]).unwrap());
+    }
+}
 #[embassy_executor::task]
 async fn connection(mut controller: WifiController<'static>) {
     info!("start connection task");

@@ -45,6 +45,5 @@ async fn main(spawner: Spawner) {
         Timer::after(Duration::from_secs(1)).await;
         led.toggle();
     }
-
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0-beta.1/examples/src/bin
 }
