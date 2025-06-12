@@ -11,7 +11,11 @@ use panic_probe as _;
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) -> ! {
     let p = embassy_stm32::init(Default::default());
-    let mut  led = Output::new(p.PC13, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::Medium);
+    let mut led = Output::new(
+        p.PC13,
+        embassy_stm32::gpio::Level::Low,
+        embassy_stm32::gpio::Speed::Medium,
+    );
     loop {
         info!("hello");
         Timer::after_secs(1).await;
