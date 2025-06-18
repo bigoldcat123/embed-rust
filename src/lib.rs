@@ -1,6 +1,7 @@
 #![no_std]
 #![allow(static_mut_refs)]
 pub mod usb;
+pub mod display_logger;
 use embassy_stm32::{
     adc, bind_interrupts, i2c,
     peripherals::{self, ADC1},

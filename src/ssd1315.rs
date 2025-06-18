@@ -1,4 +1,3 @@
-use defmt::info;
 use embedded_hal_async::i2c::I2c;
 
 static ADDR: u8 = 0x3C; // SSD1306 通常是 0x3C 或 0x3D
@@ -24,9 +23,9 @@ impl<T: I2c> Ssd1315<T> {
             }
         }
     }
-    pub fn image(&mut self, path: &'static str) {
-        let bytes = include_bytes!("../girl.bin");
-    }
+    // pub fn image(&mut self, path: &'static str) {
+    //     let bytes = include_bytes!("../girl.bin");
+    // }
 
     pub fn add_square_sized(&mut self, row: usize, col: usize, width: usize, height: usize) {
         if row + height > 63 {

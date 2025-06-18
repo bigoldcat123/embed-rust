@@ -31,7 +31,6 @@ use ssd1306::{I2CDisplayInterface, Ssd1306, mode::DisplayConfig, size::DisplaySi
 bind_interrupts!(pub struct Irqs {
     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
-
 });
 
 static BTN_PUSH: Channel<ThreadModeRawMutex, u8, 3> = channel::Channel::new();
