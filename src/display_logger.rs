@@ -7,7 +7,23 @@ use heapless::String;
 use ssd1306::{I2CDisplayInterface, Ssd1306, mode::DisplayConfig, size::DisplaySize128x64};
 
 static LOGGER_CHANNEL: Channel<ThreadModeRawMutex, String<128>, 8> = channel::Channel::new();
-
+///
+/// # how to use
+/// ```
+/// let i2c: I2c<'static, embassy_stm32::mode::Async> = I2c::new(
+///     p.I2C1,
+///     p.PB6,
+///     p.PB7,
+///     Irqs,
+///     p.DMA1_CH6,
+///     p.DMA1_CH7,
+///     khz(400),
+///     Default::default(),
+///     );
+/// let logger_actor = LoggerActor::new(i2c);
+/// let logger_handle = logger_actor.handle();
+/// _spawner.spawn(logger_actor_task(logger_actor)).unwrap();
+/// ```
 pub struct LoggerActor {
     i2c: I2c<'static, Async>,
     msg_reciver: Receiver<'static, ThreadModeRawMutex, String<128>, 8>,
