@@ -6,12 +6,13 @@ use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_stm32::{gpio::Output, rcc::{AHBPrescaler, APBPrescaler, Hse, Pll, PllMul, PllPreDiv, PllSource, Sysclk}, spi::{self, Config, Spi}, time::hz};
 use embassy_time::Timer;
+use iic_pi::display_dirver::st7789::St7789;
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) -> ! {
     let mut config = embassy_stm32::Config::default();
-    config.rcc.hse = Some(Hse {
+{    config.rcc.hse = Some(Hse {
         freq:hz(8_000_000),
         mode:embassy_stm32::rcc::HseMode::Oscillator
     });
@@ -23,12 +24,12 @@ async fn main(_spawner: Spawner) -> ! {
     config.rcc.sys = Sysclk::PLL1_P;
     config.rcc.ahb_pre = AHBPrescaler::DIV1;
     config.rcc.apb1_pre = APBPrescaler::DIV2;
-    config.rcc.apb2_pre = APBPrescaler::DIV1;
+    config.rcc.apb2_pre = APBPrescaler::DIV1;}
     let p = embassy_stm32::init(config);
     let mut config = Config::default();
     config.frequency = hz(20_000_000);
     config.mode = spi::MODE_3;
-    let mut spi = Spi::new(
+    let  spi = Spi::new(
         p.SPI1,
         p.PA5,
         p.PA7,
@@ -37,53 +38,56 @@ async fn main(_spawner: Spawner) -> ! {
         p.DMA1_CH2,
         config,
     );
-    let mut cs = Output::new(
-        p.PA4,
-        embassy_stm32::gpio::Level::High,
-        embassy_stm32::gpio::Speed::Medium,
-    );
-    let mut dc = Output::new(
-        p.PA3,
-        embassy_stm32::gpio::Level::High,
-        embassy_stm32::gpio::Speed::Medium,
-    );
-    Timer::after_millis(100).await;
-    info!("set cs");
-    cs.set_low();Timer::after_millis(100).await;
-    info!("set dc to 0, command model");
-    dc.set_low();Timer::after_millis(100).await;
-    spi.write(&[0x01_u8]).await.unwrap(); Timer::after_millis(100).await;// reset 
-    spi.write(&[0x29_u8,0x21]).await.unwrap(); Timer::after_millis(100).await;// display on
+    // let mut cs = Output::new(
+    //     p.PA4,
+    //     embassy_stm32::gpio::Level::High,
+    //     embassy_stm32::gpio::Speed::Medium,
+    // );
+    // let mut dc = Output::new(
+    //     p.PA3,
+    //     embassy_stm32::gpio::Level::High,
+    //     embassy_stm32::gpio::Speed::Medium,
+    // );
+    let mut display = St7789::new(spi, p.PA4, p.PA3);
+
+    // Timer::after_millis(100).await;
+    // info!("set cs");
+    // cs.set_low();Timer::after_millis(100).await;
+    // info!("set dc to 0, command model");
+    // dc.set_low();Timer::after_millis(100).await;
+    // spi.write(&[0x01_u8]).await.unwrap(); Timer::after_millis(100).await;// reset 
+    // spi.write(&[0x29_u8,0x21]).await.unwrap(); Timer::after_millis(100).await;// display on
    
-    spi.write(&[0x11_u8]).await.unwrap(); Timer::after_millis(100).await;// sleep out 
+    // spi.write(&[0x11_u8]).await.unwrap(); Timer::after_millis(100).await;// sleep out 
     
-    // set color mode
-    dc.set_low();Timer::after_millis(100).await;
-    spi.write(&[0x3A_u8]).await.unwrap(); Timer::after_millis(100).await;
-    dc.set_high();Timer::after_millis(100).await;
-    spi.write(&[0x55_u8]).await.unwrap(); Timer::after_millis(100).await;
-    
+    // // set color mode
+    // dc.set_low();Timer::after_millis(100).await;
+    // spi.write(&[0x3A_u8]).await.unwrap(); Timer::after_millis(100).await;
+    // dc.set_high();Timer::after_millis(100).await;
+    // spi.write(&[0x55_u8]).await.unwrap(); Timer::after_millis(100).await;
+    display.init().await.unwrap();
     //set col address
-    dc.set_low();Timer::after_millis(100).await;
-    spi.write(&[0x2A_u8]).await.unwrap(); Timer::after_millis(100).await;
-    dc.set_high();Timer::after_millis(100).await;
-    spi.write(&[0x00_u8,0x00,0x00,149]).await.unwrap(); Timer::after_millis(100).await;
-    
-    // set row address
-    dc.set_low();Timer::after_millis(100).await;
-    spi.write(&[0x2B_u8]).await.unwrap(); Timer::after_millis(100).await;
-    dc.set_high();Timer::after_millis(100).await;
-    spi.write(&[0x00_u8,0x00,0x00,99]).await.unwrap(); Timer::after_millis(100).await;
+    // dc.set_low();Timer::after_millis(100).await;
+    // spi.write(&[0x2A_u8]).await.unwrap(); Timer::after_millis(100).await;
+    // dc.set_high();Timer::after_millis(100).await;
+    // spi.write(&[0x00_u8,0x00,0x00,149]).await.unwrap(); Timer::after_millis(100).await;
+    display.set_col(0, 149).await.unwrap();
+    // // set row address
+    // dc.set_low();Timer::after_millis(100).await;
+    // spi.write(&[0x2B_u8]).await.unwrap(); Timer::after_millis(100).await;
+    // dc.set_high();Timer::after_millis(100).await;
+    // spi.write(&[0x00_u8,0x00,0x00,99]).await.unwrap(); Timer::after_millis(100).await;
+    display.set_row(0, 99).await.unwrap();
     
 
 
     //write data
-    dc.set_low();Timer::after_millis(100).await;
-    spi.write(&[0x2C_u8]).await.unwrap(); Timer::after_millis(100).await;
-    dc.set_high();Timer::after_millis(100).await;
+    // dc.set_low();Timer::after_millis(100).await;
+    // spi.write(&[0x2C_u8]).await.unwrap(); Timer::after_millis(100).await;
+    // dc.set_high();Timer::after_millis(100).await;
     // for i in 0..2 {
     // let b: &'static [u8; 100 * 150] = include_bytes!("../../huihui.bin");
-    spi.write(&[0xffff_u16, 0xffff, 0xf79d, 0xef3c, 0xdedb, 0xd699, 0xce59, 0xbdf7, 0xbdf7, 0xb5b6, 0xad95, 0xa534, 0xad95, 0xa534, 0x9cf3, 0x9cf2, 
+    display.write_memory(&[0xffff_u16, 0xffff, 0xf79d, 0xef3c, 0xdedb, 0xd699, 0xce59, 0xbdf7, 0xbdf7, 0xb5b6, 0xad95, 0xa534, 0xad95, 0xa534, 0x9cf3, 0x9cf2, 
         0x9cf3, 0x94b1, 0x8c91, 0x94b1, 0x8c91, 0x94b1, 0x94d2, 0x94b1, 0x9491, 0x8c91, 0x94d2, 0x8c70, 0x8c70, 0x9cf3, 0x5b4b, 0x8430, 
         0x7c0f, 0x842f, 0x8c70, 0x8430, 0x8c50, 0x8c30, 0x8c30, 0x8430, 0x8430, 0x842f, 0x842f, 0x7bee, 0x7bce, 0x7bee, 0x8c2f, 0x7bad, 
         0x83ef, 0x7bce, 0x840f, 0x7bce, 0x73ce, 0x6b8d, 0x52a9, 0x634b, 0x6b6c, 0x632b, 0x5b2b, 0x52e9, 0x6b48, 0x83e0, 0x8c00, 0x93c0, 
@@ -1026,7 +1030,7 @@ async fn main(_spawner: Spawner) -> ! {
 
 
 
-    cs.set_high();
+    // cs.set_high();
 
     // dc.set_low();Timer::after_millis(100).await;
     // spi.write(&[0x36_u8]).await.unwrap(); Timer::after_millis(100).await;// address order from top to bottom, from left to right
