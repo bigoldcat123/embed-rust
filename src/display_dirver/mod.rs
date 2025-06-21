@@ -1,4 +1,4 @@
-
+#![allow(unused)]
 pub mod st7789;
 #[repr(u8)]
 enum ST7789Cmd {
