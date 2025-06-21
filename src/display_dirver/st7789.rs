@@ -1,3 +1,4 @@
+use defmt::info;
 use embassy_stm32::{
     Peripheral,
     gpio::{Level, Output, Pin, Speed},
@@ -6,13 +7,15 @@ use embassy_stm32::{
 };
 use embassy_time::Timer;
 
-use crate::display_dirver::ST7789Cmd;
+use crate::display_dirver::st7789_cmd;
+
 
 pub struct St7789<'a> {
     spi: Spi<'a, Async>,
     delay_ms: u64,
     cs: Output<'a>,
     dc: Output<'a>,
+    is_initiated:bool
 }
 impl<'a> St7789<'a> {
     pub fn new(
@@ -28,17 +31,19 @@ impl<'a> St7789<'a> {
             delay_ms: 100,
             cs,
             dc,
+            is_initiated:false
         }
     }
     pub async fn init(&mut self) -> Result<(), Error> {
+        self.is_initiated = true;
         Timer::after_millis(self.delay_ms).await;
         self.cs.set_low();
         Timer::after_millis(self.delay_ms).await;
-        self.write_command(&[ST7789Cmd::Reset as u8]).await?;
+        self.write_command(&[st7789_cmd::RESET]).await?;
 
-        self.write_command(&[ST7789Cmd::SleepOut as u8, ST7789Cmd::DisplayOn as u8,ST7789Cmd::DisplayInversionOn as u8]).await?;
+        self.write_command(&[st7789_cmd::SLEEP_OUT, st7789_cmd::DISPLAY_ON,st7789_cmd::DISPLAY_INVERSION_ON]).await?;
 
-        self.write_command(&[ST7789Cmd::ColMode as u8]).await?;
+        self.write_command(&[st7789_cmd::COL_MODE]).await?;
         self.write_data(&[0x55_u8]).await?;
 
         Ok(())
@@ -49,7 +54,9 @@ impl<'a> St7789<'a> {
         let start_low = (start & 0x00ff) as u8;
         let end_hight = (end >> 8) as u8;
         let end_low = (end & 0x00ff) as u8;
-        self.write_command(&[ST7789Cmd::RowAddressSet as u8]).await?;
+        info!("{:?}",&[start_hight, start_low, end_hight, end_low]);
+
+        self.write_command(&[st7789_cmd::ROW_ADDRESS_SET]).await?;
         self.write_data(&[start_hight, start_low, end_hight, end_low])
             .await?;
         Ok(())
@@ -60,24 +67,31 @@ impl<'a> St7789<'a> {
         let start_low = (start & 0x00ff) as u8;
         let end_hight = (end >> 8) as u8;
         let end_low = (end & 0x00ff) as u8;
-        self.write_command(&[ST7789Cmd::ColumnAddressSet as u8])
+        info!("{:?}",&[start_hight, start_low, end_hight, end_low]);
+        self.write_command(&[st7789_cmd::COLUMN_ADDRESS_SET])
             .await?;
         self.write_data(&[start_hight, start_low, end_hight, end_low])
             .await?;
         Ok(())
     }
     pub async fn write_memory<W: Word>(&mut self, data: &[W]) -> Result<(), Error> {
-        self.write_command(&[ST7789Cmd::MemoryWrite as u8]).await?;
+        self.write_command(&[st7789_cmd::MEMORY_WRITE]).await?;
         self.write_data(data).await?;
         Ok(())
     }
     async fn write_data<W: Word>(&mut self, data: &[W]) -> Result<(), Error> {
+        if !self.is_initiated {
+            panic!("init first!");
+        }
         self.dc.set_high();
         Timer::after_millis(self.delay_ms).await;
         self.spi.write(data).await?;
         Ok(())
     }
     async fn write_command<W: Word>(&mut self, data: &[W]) -> Result<(), Error> {
+        if !self.is_initiated {
+            panic!("init first!");
+        }
         self.dc.set_low();
         Timer::after_millis(self.delay_ms).await;
         self.spi.write(data).await?;

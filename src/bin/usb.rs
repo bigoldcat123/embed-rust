@@ -35,7 +35,7 @@
 // }
 use defmt::{panic, *};
 use embassy_executor::Spawner;
-use embassy_futures::select::{self, Either, select};
+use embassy_futures::select::{Either, select};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::mode::Async;
 use embassy_stm32::time::Hertz;
