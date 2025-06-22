@@ -7,21 +7,18 @@ use defmt::info;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    i2c::I2c,
-    time::{hz, khz},
-    timer::simple_pwm::{PwmPin, SimplePwm},
+    bind_interrupts, i2c::{self, I2c}, peripherals, time::{hz, khz}, timer::simple_pwm::{PwmPin, SimplePwm}
 };
 use embassy_time::Timer;
 use heapless::String;
 use iic_pi::{
-    Irqs,
     display_logger::{LoggerActor, logger_actor_task},
 };
 use panic_probe as _;
-// bind_interrupts!(pub struct Irqs {
-//     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
-//     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
-// });
+bind_interrupts!(pub struct Irqs {
+    I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
+    I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
+});
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) -> ! {

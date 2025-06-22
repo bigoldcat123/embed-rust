@@ -71,9 +71,9 @@ async fn usb_function(
     handle: LoggerHandle,
 ) {
     // info!("usb_function initiate!");
-    handle
-        .send(String::from_str("usb_function initiate!").unwrap())
-        .await;
+    // handle
+    //     .send(String::from_str("usb_function initiate!").unwrap())
+    //     .await;
     loop {
         // info!("wait usb connection!");
         handle
@@ -87,7 +87,7 @@ async fn usb_function(
             .await;
         let _ = function(&mut class, &handle).await;
         // info!("disconnect");
-        handle.send(String::from_str("disconnect").unwrap()).await;
+        // handle.send(String::from_str("disconnect").unwrap()).await;
         Timer::after_secs(1).await;
     }
 }

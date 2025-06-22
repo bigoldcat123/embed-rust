@@ -34,7 +34,7 @@ pub fn get_usb<'a: 'static>(
     let state = State::new();
     unsafe {
         STATE = Some(state);
-        let mut builder: Builder<'a, Driver<'static, USB>> = Builder::new(
+        let mut builder = Builder::new(
             driver,
             config,
             &mut CONFIG_DESCRIPTOR,
