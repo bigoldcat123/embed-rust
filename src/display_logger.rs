@@ -24,6 +24,7 @@ static LOGGER_CHANNEL: Channel<ThreadModeRawMutex, String<128>, 8> = channel::Ch
 /// let logger_handle = logger_actor.handle();
 /// _spawner.spawn(logger_actor_task(logger_actor)).unwrap();
 /// ```
+pub type LoggerHandle = Sender<'static, ThreadModeRawMutex, heapless::String<128>, 8> ;
 pub struct LoggerActor {
     i2c: I2c<'static, Async>,
     msg_reciver: Receiver<'static, ThreadModeRawMutex, String<128>, 8>,
@@ -35,7 +36,7 @@ impl LoggerActor {
             msg_reciver: LOGGER_CHANNEL.receiver(),
         }
     }
-    pub fn handle(&self) -> Sender<'static, ThreadModeRawMutex, String<128>, 8> {
+    pub fn handle(&self) -> LoggerHandle {
         LOGGER_CHANNEL.sender()
     }
 }

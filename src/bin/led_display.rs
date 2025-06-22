@@ -4,14 +4,11 @@
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    gpio::Input,
-    i2c::I2c,
-    peripherals::{PA5, PA6},
-    time::Hertz,
+    bind_interrupts, gpio::Input, i2c::{self, I2c}, peripherals::{self, PA5, PA6}, time::Hertz
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::Timer;
-use iic_pi::{Irqs, ssd1315::Ssd1315};
+use iic_pi::ssd1315::Ssd1315;
 use {defmt_rtt as _, panic_probe as _};
 
 static mut CHANNLE: embassy_sync::channel::Channel<NoopRawMutex, Direction, 4> =
@@ -26,6 +23,10 @@ enum Direction {
     Left,
     Right,
 }
+bind_interrupts!(pub struct Irqs {
+    I2C2_EV => i2c::EventInterruptHandler<peripherals::I2C2>;
+    I2C2_ER => i2c::ErrorInterruptHandler<peripherals::I2C2>;
+});
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {

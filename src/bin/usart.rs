@@ -3,13 +3,15 @@
 use defmt::{error, info};
 use embassy_executor::Spawner;
 use embassy_stm32::{
-    mode::Async,
-    usart::{Uart, UartRx},
+    bind_interrupts, mode::Async, peripherals, usart::{self, Uart, UartRx}
 };
 use embassy_time::Timer;
-use iic_pi::Irqs;
 
 use {defmt_rtt as _, panic_probe as _};
+
+bind_interrupts!(pub struct Irqs {
+    USART1 => usart::InterruptHandler<peripherals::USART1>;
+});
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -34,7 +36,7 @@ async fn read(mut rx: UartRx<'static, Async>) {
     let mut real_buf = [0; 64];
     let mut idx = 0;
     loop {
-        if let Ok(e) = rx.read(&mut buf).await {
+        if let Ok(_) = rx.read(&mut buf).await {
             real_buf[idx] = buf[0];
             idx += 1;
             if buf[0] == 10 {
