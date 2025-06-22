@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use core::{fmt::Write, str::FromStr};
+use core::fmt::Write;
 
 use defmt::info;
 use defmt_rtt as _;
@@ -12,12 +12,8 @@ use embassy_stm32::{
     i2c::{self, I2c},
     mode::Async,
     peripherals::{self, PA2},
-    time::{hz, khz},
-    timer::{
-        self,
-        input_capture::{CapturePin, InputCapture},
-        simple_pwm::{PwmPin, SimplePwm},
-    },
+    time::khz,
+    timer::simple_pwm::{PwmPin, SimplePwm},
 };
 use embassy_sync::{
     blocking_mutex::raw::ThreadModeRawMutex,

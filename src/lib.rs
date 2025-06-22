@@ -1,16 +1,14 @@
 #![no_std]
 #![allow(static_mut_refs)]
+
 pub mod display_logger;
 pub mod usb;
 use embassy_stm32::{time::Hertz, Config};
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel};
 
 pub mod at24c64;
 pub mod display_dirver;
 pub mod ssd1315;
 
-pub static mut CHANNEL: Channel<NoopRawMutex, u32, 3> = Channel::<NoopRawMutex, u32, 3>::new();
-pub static mut CHANNEL2: Channel<NoopRawMutex, u32, 3> = Channel::<NoopRawMutex, u32, 3>::new();
 
 // bind_interrupts!(pub struct Irqs {
 //     ADC1_2 => adc::InterruptHandler<ADC1>;
