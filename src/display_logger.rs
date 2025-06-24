@@ -1,3 +1,5 @@
+use core::fmt::Write;
+
 use embassy_stm32::{i2c::I2c, mode::Async};
 use embassy_sync::{
     blocking_mutex::raw::ThreadModeRawMutex,
@@ -24,7 +26,23 @@ static LOGGER_CHANNEL: Channel<ThreadModeRawMutex, String<128>, 8> = channel::Ch
 /// let logger_handle = logger_actor.handle();
 /// _spawner.spawn(logger_actor_task(logger_actor)).unwrap();
 /// ```
-pub type LoggerHandle = Sender<'static, ThreadModeRawMutex, heapless::String<128>, 8> ;
+pub type LoggerSender = Sender<'static, ThreadModeRawMutex, heapless::String<128>, 8>;
+pub struct LoggerHandle {
+    sender: LoggerSender,
+}
+impl LoggerHandle {
+    pub fn new(sender: LoggerSender) -> Self {
+        Self { sender }
+    }
+    pub async fn log(&self, info: core::fmt::Arguments<'_>) {
+        let mut s: String<128> = String::new();
+        s.write_fmt(info).unwrap();
+        self.sender.send(s).await
+    }
+    pub async fn log_str(&self, info: &str) {
+        self.log(format_args!("{}", info)).await
+    }
+}
 pub struct LoggerActor {
     i2c: I2c<'static, Async>,
     msg_reciver: Receiver<'static, ThreadModeRawMutex, String<128>, 8>,
@@ -37,7 +55,9 @@ impl LoggerActor {
         }
     }
     pub fn handle(&self) -> LoggerHandle {
-        LOGGER_CHANNEL.sender()
+        LoggerHandle {
+            sender: LOGGER_CHANNEL.sender(),
+        }
     }
 }
 

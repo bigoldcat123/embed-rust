@@ -2,15 +2,19 @@
 #![no_main]
 #![allow(static_mut_refs)]
 
+use defmt::info;
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::i2c::{self, I2c};
-use embassy_stm32::time::khz;
+use embassy_stm32::spi::{self, Config, Spi};
+use embassy_stm32::time::{hz, khz};
 use embassy_stm32::usb::{self, Driver, Instance};
 use embassy_stm32::{Peripheral, bind_interrupts, peripherals};
+use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::Timer;
 use embassy_usb::class::cdc_acm::CdcAcmClass;
-use heapless::String;
+use iic_pi::display_dirver::st7789::St7789;
 use iic_pi::display_logger::{LoggerActor, LoggerHandle, logger_actor_task};
 use iic_pi::high_freq_config;
 use iic_pi::usb::{Disconnected, get_usb, usb_run};
@@ -20,10 +24,15 @@ bind_interrupts!(struct Irqs {
     I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
 });
+type ImageReceiver = Receiver<'static, ThreadModeRawMutex, usize, 2>;
+type ImageSender = Sender<'static, ThreadModeRawMutex, usize, 2>;
+static IMAGE_CHANNEL: Channel<ThreadModeRawMutex, usize, 2> = Channel::new();
+static mut IMAGE_BUF: [u8; 64] = [0; 64];
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_stm32::init(high_freq_config());
+    // init logger~
     let i2c = I2c::new(
         p.I2C1,
         p.PB6,
@@ -39,10 +48,6 @@ async fn main(_spawner: Spawner) {
     _spawner.spawn(logger_actor_task(logger)).unwrap();
 
     unsafe {
-        // BluePill board has a pull-up resistor on the D+ line.
-        // Pull the D+ pin down to send a RESET condition to the USB bus.
-        // This forced reset is needed only for development, without it host
-        // will not reset your device when you upload new firmware.
         let _dp = Output::new(p.PA12.clone_unchecked(), Level::Low, Speed::Low);
         Timer::after_millis(10).await;
     }
@@ -55,10 +60,40 @@ async fn main(_spawner: Spawner) {
 
     Timer::after_millis(100).await;
 
-    _spawner.spawn(usb_function(class, handle)).unwrap();
-    // _spawner.spawn(led_work(p.PC13, receiver)).unwrap();
+    _spawner
+        .spawn(usb_function(class, handle, IMAGE_CHANNEL.sender()))
+        .unwrap();
+
+    // spi
+    let mut config = Config::default();
+    config.mode = spi::MODE_3; // important!!!!
+    config.frequency = hz(20_000_000);
+    let spi = Spi::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA1_CH3, p.DMA1_CH2, config);
+
+    let mut display: St7789<'static> = St7789::new(spi, p.PA4, p.PA3);
+    display.init().await.unwrap();
+
+    display.set_col(0, 149).await.unwrap();
+    display.set_row(0, 99).await.unwrap();
+    display.write_memory().await.unwrap();
+
+    info!("e2");
+
+    _spawner
+        .spawn(image_display_actor(display, IMAGE_CHANNEL.receiver()))
+        .unwrap();
     loop {
         Timer::after_secs(1).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn image_display_actor(mut display_driver: St7789<'static>, img_reciver: ImageReceiver) {
+    unsafe {
+        loop {
+            let n = img_reciver.receive().await;
+            display_driver.write_data(&IMAGE_BUF[..n]).await.unwrap();
+        }
     }
 }
 
@@ -66,6 +101,7 @@ async fn main(_spawner: Spawner) {
 async fn usb_function(
     mut class: CdcAcmClass<'static, Driver<'static, peripherals::USB>>,
     handle: LoggerHandle,
+    img_sender: ImageSender,
 ) {
     // info!("usb_function initiate!");
     // handle
@@ -78,7 +114,7 @@ async fn usb_function(
         class.wait_connection().await;
         // info!("connect successfully!");
         handle.log_str("successfully").await;
-        let _ = function(&mut class, &handle).await;
+        let _ = function(&mut class, &handle, &img_sender).await;
         // info!("disconnect");
         // handle.send(String::from_str("disconnect").unwrap()).await;
         Timer::after_secs(1).await;
@@ -87,15 +123,18 @@ async fn usb_function(
 
 async fn function<'d, T: Instance + 'd>(
     class: &mut CdcAcmClass<'d, Driver<'d, T>>,
-    handle: &LoggerHandle,
+    _handle: &LoggerHandle,
+    img_sender: &ImageSender,
 ) -> Result<(), Disconnected> {
     loop {
-        let mut buf = [0; 64];
-        let n = class.read_packet(&mut buf).await?;
-        // info!("{}", &buf[..n]);
-        let x: String<128> = String::from_iter(buf.iter().map(|x| *x as char).take(n));
-        handle.log_str(&x).await;
-        class.write_packet(&buf[..n]).await?;
+        unsafe {
+            let n = class.read_packet(&mut IMAGE_BUF).await?;
+            img_sender.send(n).await;
+        }
+
+        // handle.log(format_args!("{}", len)).await;
+
+        class.write_packet("ok".as_bytes()).await?;
     }
 }
 

@@ -28,7 +28,7 @@ impl<'a> St7789<'a> {
 
         Self {
             spi,
-            delay_ms: 100,
+            delay_ms: 1,
             cs,
             dc,
             is_initiated:false
@@ -74,12 +74,12 @@ impl<'a> St7789<'a> {
             .await?;
         Ok(())
     }
-    pub async fn write_memory<W: Word>(&mut self, data: &[W]) -> Result<(), Error> {
+    pub async fn write_memory(&mut self) -> Result<(), Error> {
         self.write_command(&[st7789_cmd::MEMORY_WRITE]).await?;
-        self.write_data(data).await?;
+        // self.write_data(data).await?;
         Ok(())
     }
-    async fn write_data<W: Word>(&mut self, data: &[W]) -> Result<(), Error> {
+    pub async fn write_data<W: Word>(&mut self, data: &[W]) -> Result<(), Error> {
         if !self.is_initiated {
             panic!("init first!");
         }

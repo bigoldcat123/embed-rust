@@ -26,10 +26,11 @@ async fn main(_spawner: Spawner) -> ! {
     display.set_row(0 + 200, 99 + 200).await.unwrap();
 
     display
-        .write_memory(include_bytes!("../../huihui-150*100.bin"))
+        .write_memory()
         .await
         .unwrap();
-
+    display.write_data(include_bytes!("../../huihui-150*100.bin")).await.unwrap();
+    Timer::after_secs(1).await;
     Timer::after_millis(100).await;
     loop {
         info!("hello");

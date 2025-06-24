@@ -60,14 +60,14 @@ async fn main(_spawner: Spawner) -> ! {
 
     loop {
         ch1.set_duty_cycle_percent(current * 10 + 9);
-        let mut s = String::new();
+        let mut s: String<128> = String::new();
         s.write_fmt(format_args!(
             "{} current {}%",
             ch1.current_duty_cycle(),
             current * 10 + 9
         ))
         .unwrap();
-        logger_handle.send(s).await;
+        logger_handle.log_str(&s).await;
         current += 1;
         if current == 10 {
             current = 0;
