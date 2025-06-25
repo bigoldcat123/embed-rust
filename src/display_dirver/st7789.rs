@@ -84,7 +84,7 @@ impl<'a> St7789<'a> {
             panic!("init first!");
         }
         self.dc.set_high();
-        Timer::after_millis(self.delay_ms).await;
+        // Timer::after_millis(self.delay_ms).await;
         self.spi.write(data).await?;
         Ok(())
     }
@@ -95,6 +95,7 @@ impl<'a> St7789<'a> {
         self.dc.set_low();
         Timer::after_millis(self.delay_ms).await;
         self.spi.write(data).await?;
+        Timer::after_millis(self.delay_ms).await;
         Ok(())
     }
 }

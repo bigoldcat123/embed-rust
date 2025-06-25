@@ -26,7 +26,11 @@ bind_interrupts!(struct Irqs {
 });
 type ImageReceiver = Receiver<'static, ThreadModeRawMutex, usize, 2>;
 type ImageSender = Sender<'static, ThreadModeRawMutex, usize, 2>;
+type ImageOkSender = ImageSender;
+type ImageOkReceiver = ImageReceiver;
 static IMAGE_CHANNEL: Channel<ThreadModeRawMutex, usize, 2> = Channel::new();
+static IMAGE_OK_CHANNEL: Channel<ThreadModeRawMutex, usize, 2> = Channel::new();
+
 static mut IMAGE_BUF: [u8; 64] = [0; 64];
 
 #[embassy_executor::main]
@@ -61,7 +65,12 @@ async fn main(_spawner: Spawner) {
     Timer::after_millis(100).await;
 
     _spawner
-        .spawn(usb_function(class, handle, IMAGE_CHANNEL.sender()))
+        .spawn(usb_function(
+            class,
+            handle,
+            IMAGE_CHANNEL.sender(),
+            IMAGE_OK_CHANNEL.receiver(),
+        ))
         .unwrap();
 
     // spi
@@ -80,7 +89,11 @@ async fn main(_spawner: Spawner) {
     info!("e2");
 
     _spawner
-        .spawn(image_display_actor(display, IMAGE_CHANNEL.receiver()))
+        .spawn(image_display_actor(
+            display,
+            IMAGE_CHANNEL.receiver(),
+            IMAGE_OK_CHANNEL.sender(),
+        ))
         .unwrap();
     loop {
         Timer::after_secs(1).await;
@@ -88,11 +101,16 @@ async fn main(_spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn image_display_actor(mut display_driver: St7789<'static>, img_reciver: ImageReceiver) {
+async fn image_display_actor(
+    mut display_driver: St7789<'static>,
+    img_reciver: ImageReceiver,
+    ok_sender: ImageOkSender,
+) {
     unsafe {
         loop {
             let n = img_reciver.receive().await;
             display_driver.write_data(&IMAGE_BUF[..n]).await.unwrap();
+            ok_sender.send(1).await;
         }
     }
 }
@@ -102,6 +120,7 @@ async fn usb_function(
     mut class: CdcAcmClass<'static, Driver<'static, peripherals::USB>>,
     handle: LoggerHandle,
     img_sender: ImageSender,
+    img_ok_receiver: ImageOkReceiver,
 ) {
     // info!("usb_function initiate!");
     // handle
@@ -114,7 +133,7 @@ async fn usb_function(
         class.wait_connection().await;
         // info!("connect successfully!");
         handle.log_str("successfully").await;
-        let _ = function(&mut class, &handle, &img_sender).await;
+        let _ = function(&mut class, &handle, &img_sender, &img_ok_receiver).await;
         // info!("disconnect");
         // handle.send(String::from_str("disconnect").unwrap()).await;
         Timer::after_secs(1).await;
@@ -125,14 +144,14 @@ async fn function<'d, T: Instance + 'd>(
     class: &mut CdcAcmClass<'d, Driver<'d, T>>,
     _handle: &LoggerHandle,
     img_sender: &ImageSender,
+    img_ok_receiver: &ImageOkReceiver,
 ) -> Result<(), Disconnected> {
     loop {
         unsafe {
             let n = class.read_packet(&mut IMAGE_BUF).await?;
             img_sender.send(n).await;
         }
-
-        // handle.log(format_args!("{}", len)).await;
+        img_ok_receiver.receive().await;
 
         class.write_packet("ok".as_bytes()).await?;
     }
