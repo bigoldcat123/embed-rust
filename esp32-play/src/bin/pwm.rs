@@ -8,13 +8,12 @@
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use esp_hal::clock::CpuClock;
-use esp_hal::gpio::{Output, OutputConfig};
+use esp_hal::gpio::Output;
 use esp_hal::ledc::channel::ChannelIFace;
-use esp_hal::ledc::timer::{TimerIFace, TimerSpeed};
+use esp_hal::ledc::timer::TimerIFace;
 use esp_hal::ledc::{channel, timer, Ledc, LowSpeed};
-use esp_hal::peripherals::LEDC;
 use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_println as _;
@@ -37,6 +36,8 @@ async fn main(spawner: Spawner) {
 
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
     esp_hal_embassy::init(timer0.alarm0);
+
+
 
     let mut led = Output::new(
         peripherals.GPIO7,
@@ -70,7 +71,7 @@ async fn main(spawner: Spawner) {
         .unwrap();
     let mut a = 0;
     loop {
-        info!("{}",a);
+        info!("{}", a);
 
         channel0.set_duty(a).unwrap();
         a += 10;
