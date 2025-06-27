@@ -6,6 +6,7 @@ use defmt::info;
 use embassy_executor::Spawner;
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::i2c::{self, I2c};
+use embassy_stm32::mode::Async;
 use embassy_stm32::spi::{self, Config, Spi};
 use embassy_stm32::time::{hz, khz};
 use embassy_stm32::usb::{self, Driver, Instance};
@@ -79,7 +80,7 @@ async fn main(_spawner: Spawner) {
     config.frequency = hz(20_000_000);
     let spi = Spi::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA1_CH3, p.DMA1_CH2, config);
 
-    let mut display: St7789<'static> = St7789::new(spi, p.PA4, p.PA3);
+    let mut display = St7789::new(spi, p.PA4, p.PA3);
     display.init().await.unwrap();
 
     display.set_col(0, 149).await.unwrap();
@@ -102,7 +103,7 @@ async fn main(_spawner: Spawner) {
 
 #[embassy_executor::task]
 async fn image_display_actor(
-    mut display_driver: St7789<'static>,
+    mut display_driver: St7789<'static, Spi<'static, Async>>,
     img_reciver: ImageReceiver,
     ok_sender: ImageOkSender,
 ) {

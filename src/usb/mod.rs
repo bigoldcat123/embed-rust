@@ -45,7 +45,8 @@ pub fn get_usb<'a: 'static>(
         // Create classes on the builder.
         let class: CdcAcmClass<'a, Driver<'static, USB>> =
             CdcAcmClass::new(&mut builder, STATE.as_mut().unwrap(), packet_size as u16);// max pocket may change~
-        let usb: UsbDevice<'a, Driver<'static, USB>> = builder.build();
+        
+            let usb: UsbDevice<'a, Driver<'static, USB>> = builder.build();
         (class, usb)
     }
 }
