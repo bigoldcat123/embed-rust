@@ -33,7 +33,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 struct Delay {}
 impl Timer_ for Delay {
     async fn delay_ms(&self, ms: u64) -> () {
-        Timer::after_millis(ms).await
+        Timer::after_millis(ms * 100).await
     }
 }
 
@@ -61,7 +61,7 @@ async fn main(spawner: Spawner) {
     let cfg = Config::default();
     let spi = Spi::new(
         peripherals.SPI2,
-        cfg.with_mode(Mode::_2).with_frequency(Rate::from_mhz(20)),
+        cfg.with_mode(Mode::_2).with_frequency(Rate::from_mhz(10)),
     )
     .unwrap()
     .with_sck(Output::new(sclk, Level::High, Default::default()))
@@ -79,14 +79,18 @@ async fn main(spawner: Spawner) {
     driver.init().await.unwrap();
 
     info!("Embassy initialized!");
-    driver.set_col(0, 100).await.unwrap();
-    driver.set_row(0, 100).await.unwrap();
+    driver.set_col(0, 239).await.unwrap();
+    driver.set_row(0, 319).await.unwrap();
     driver.write_memory().await.unwrap();
-    for _ in 0..240 {
-        for _ in 0..320 {
-            driver.write_data(&[0xff, 0x11]).await.unwrap();
-        }
-    }
+    // for _ in 0..240 {
+    //     for _ in 0..320 {
+    //         driver.write_data(&[0xff, 0x11]).await.unwrap();
+    //     }
+    // }
+    driver
+        .write_data(include_bytes!("../../../e"))
+        .await
+        .unwrap();
     // TODO: Spawn some tasks
     let _ = spawner;
     loop {
