@@ -12,7 +12,7 @@ use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::dma::{DmaRxBuf, DmaTxBuf};
 use esp_hal::dma_buffers;
-use esp_hal::gpio::Output;
+use esp_hal::gpio::{Level, Output};
 use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
 use esp_hal::spi::Mode;
 use esp_hal::time::Rate;
@@ -47,43 +47,33 @@ async fn main(spawner: Spawner) {
     // let timg0 = TimerGroup::new(peripherals.TIMG0);
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
     esp_hal_embassy::init(timer0.alarm0);
-    let sclk = peripherals.GPIO0;
-    let mosi = peripherals.GPIO1;
-    let cs = peripherals.GPIO2;
-    let dc = peripherals.GPIO3;
+
+    let sclk = peripherals.GPIO2;
+    let mosi = peripherals.GPIO3;
+    let cs = peripherals.GPIO7;
+    let dc = peripherals.GPIO6;
 
     let dma_channel = peripherals.DMA_CH0;
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
     let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
 
-    let  cfg = Config::default();
+    let cfg = Config::default();
     let spi = Spi::new(
         peripherals.SPI2,
-    cfg.with_mode(Mode::_3)
-
+        cfg.with_mode(Mode::_2).with_frequency(Rate::from_mhz(20)),
     )
     .unwrap()
-    .with_sck(sclk)
-    .with_mosi(mosi)
+    .with_sck(Output::new(sclk, Level::High, Default::default()))
+    .with_mosi(Output::new(mosi, Level::High, Default::default()))
     .with_dma(dma_channel)
     .with_buffers(dma_rx_buf, dma_tx_buf)
     .into_async();
 
     let mut driver = St7789::new(
         spi,
-        Output::new(
-            //cs
-            cs,
-            esp_hal::gpio::Level::High,
-            Default::default(),
-        ),
-        Output::new(
-            //dc
-            dc,
-            esp_hal::gpio::Level::High,
-            Default::default(),
-        ),
+        Output::new(cs, Level::High, Default::default()),
+        Output::new(dc, Level::High, Default::default()),
         Delay {},
     );
     driver.init().await.unwrap();
@@ -92,8 +82,8 @@ async fn main(spawner: Spawner) {
     driver.set_col(0, 100).await.unwrap();
     driver.set_row(0, 100).await.unwrap();
     driver.write_memory().await.unwrap();
-    for i in 0..240 {
-        for j in 0..320 {
+    for _ in 0..240 {
+        for _ in 0..320 {
             driver.write_data(&[0xff, 0x11]).await.unwrap();
         }
     }
