@@ -80,7 +80,11 @@ async fn main(_spawner: Spawner) {
     config.frequency = hz(20_000_000);
     let spi = Spi::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA1_CH3, p.DMA1_CH2, config);
 
-    let mut display = St7789::new(spi, p.PA4, p.PA3);
+    let mut display: St7789<Spi<'_, Async>, Output<'_>> = St7789::new(
+        spi,
+        Output::new(p.PA4, Level::High, Speed::Medium),
+        Output::new(p.PA3, Level::High, Speed::Medium),
+    );
     display.init().await.unwrap();
 
     display.set_col(0, 149).await.unwrap();
@@ -103,7 +107,7 @@ async fn main(_spawner: Spawner) {
 
 #[embassy_executor::task]
 async fn image_display_actor(
-    mut display_driver: St7789<'static, Spi<'static, Async>>,
+    mut display_driver: St7789<Spi<'static, Async>, Output<'static>>,
     img_reciver: ImageReceiver,
     ok_sender: ImageOkSender,
 ) {
