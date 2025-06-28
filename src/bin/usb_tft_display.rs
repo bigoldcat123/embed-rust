@@ -87,8 +87,8 @@ async fn main(_spawner: Spawner) {
 
     let mut display = St7789::new(
         spi,
-        Output::new(p.PA4, Level::High, Speed::Medium),
-        Output::new(p.PA3, Level::High, Speed::Medium),
+        Output::new(p.PA4, Level::High, Speed::Medium),//cs
+        Output::new(p.PA3, Level::High, Speed::Medium),//dc
         MyTime {},
     );
     display.init().await.unwrap();
