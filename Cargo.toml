@@ -26,6 +26,7 @@ ssd1306 = "0.10.0"
 embedded-graphics = "0.8.1"
 # my driver need!!
 embedded-hal-async = "1.0.0"
+super_simple_st7789driver = "0.1.0"
 
 [profile.dev]
 opt-level = "s"

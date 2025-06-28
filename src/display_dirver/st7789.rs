@@ -1,44 +1,42 @@
 use defmt::info;
-use embassy_stm32::{
-    Peripheral,
-    gpio::{Level, Output, Pin, Speed},
-    mode::Async,
-    spi::{Error, Spi, Word},
-};
-use embassy_time::Timer;
-use embedded_hal_async::spi::SpiBus;
 
 use crate::display_dirver::st7789_cmd;
+use embedded_hal::digital::OutputPin;
+use embedded_hal_async::spi::SpiBus;
 
-pub struct St7789<'a, SPI: SpiBus> {
+pub trait Timer_ {
+    fn delay(&self) -> impl Future<Output = ()>;
+}
+
+pub struct St7789<SPI: SpiBus, OUTPUT: OutputPin, DELAY: Timer_> {
     spi: SPI,
     delay_ms: u64,
-    cs: Output<'a>,
-    dc: Output<'a>,
+    cs: OUTPUT,
+    dc: OUTPUT,
     is_initiated: bool,
+    delay: DELAY,
 }
-impl<'a, T: SpiBus> St7789<'a, T> {
-    pub fn new(
-        spi: T,
-        cs_pin: impl Peripheral<P = impl Pin> + 'a,
-        dc_pin: impl Peripheral<P = impl Pin> + 'a,
-    ) -> Self {
-        let cs = Output::new(cs_pin, Level::High, Speed::Medium);
-        let dc = Output::new(dc_pin, Level::High, Speed::Medium);
 
+impl<T: SpiBus, OUTPUT: OutputPin, DELAY: Timer_> St7789<T, OUTPUT, DELAY> {
+    pub fn new(spi: T, mut cs: OUTPUT, mut dc: OUTPUT, delay: DELAY) -> Self {
+        cs.set_high();
+        dc.set_high();
         Self {
             spi,
             delay_ms: 1,
             cs,
             dc,
             is_initiated: false,
+            delay,
         }
     }
     pub async fn init(&mut self) -> Result<(), T::Error> {
         self.is_initiated = true;
-        Timer::after_millis(self.delay_ms).await;
+        self.delay.delay().await;
+        // Timer::after_millis(self.delay_ms).await;
         self.cs.set_low();
-        Timer::after_millis(self.delay_ms).await;
+        self.delay.delay().await;
+        // Timer::after_millis(self.delay_ms).await;
         self.write_command(&[st7789_cmd::RESET]).await?;
 
         self.write_command(&[
@@ -98,9 +96,13 @@ impl<'a, T: SpiBus> St7789<'a, T> {
             panic!("init first!");
         }
         self.dc.set_low();
-        Timer::after_millis(self.delay_ms).await;
+        self.delay.delay().await;
+
+        // Timer::after_millis(self.delay_ms).await;
         self.spi.write(data).await?;
-        Timer::after_millis(self.delay_ms).await;
+        self.delay.delay().await;
+
+        // Timer::after_millis(self.delay_ms).await;
         Ok(())
     }
 }

@@ -15,10 +15,10 @@ use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use embassy_time::Timer;
 use embassy_usb::class::cdc_acm::CdcAcmClass;
-use iic_pi::display_dirver::st7789::St7789;
 use iic_pi::display_logger::{LoggerActor, LoggerHandle, logger_actor_task};
 use iic_pi::high_freq_config;
 use iic_pi::usb::{Disconnected, get_usb, usb_run};
+use super_simple_st7789driver::{St7789, Timer_};
 use {defmt_rtt as _, panic_probe as _};
 bind_interrupts!(struct Irqs {
     USB_LP_CAN1_RX0 => usb::InterruptHandler<peripherals::USB>;
@@ -33,7 +33,12 @@ static IMAGE_CHANNEL: Channel<ThreadModeRawMutex, usize, 2> = Channel::new();
 static IMAGE_OK_CHANNEL: Channel<ThreadModeRawMutex, usize, 2> = Channel::new();
 
 static mut IMAGE_BUF: [u8; 64] = [0; 64];
-
+struct MyTime {}
+impl Timer_ for MyTime {
+    async fn delay_ms(&self, ms: u64) {
+        Timer::after_millis(ms).await;
+    }
+}
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_stm32::init(high_freq_config());
@@ -80,10 +85,11 @@ async fn main(_spawner: Spawner) {
     config.frequency = hz(20_000_000);
     let spi = Spi::new(p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA1_CH3, p.DMA1_CH2, config);
 
-    let mut display: St7789<Spi<'_, Async>, Output<'_>> = St7789::new(
+    let mut display = St7789::new(
         spi,
         Output::new(p.PA4, Level::High, Speed::Medium),
         Output::new(p.PA3, Level::High, Speed::Medium),
+        MyTime {},
     );
     display.init().await.unwrap();
 
@@ -104,10 +110,9 @@ async fn main(_spawner: Spawner) {
         Timer::after_secs(1).await;
     }
 }
-
 #[embassy_executor::task]
 async fn image_display_actor(
-    mut display_driver: St7789<Spi<'static, Async>, Output<'static>>,
+    mut display_driver: St7789<Spi<'static, Async>, Output<'static>, MyTime>,
     img_reciver: ImageReceiver,
     ok_sender: ImageOkSender,
 ) {
