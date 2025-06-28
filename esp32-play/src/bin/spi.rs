@@ -44,9 +44,9 @@ async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-    let timg0 = TimerGroup::new(peripherals.TIMG0);
-    // let timer0 = SystemTimer::new(peripherals.SYSTIMER);
-    esp_hal_embassy::init(timg0.timer0);
+    // let timg0 = TimerGroup::new(peripherals.TIMG0);
+    let timer0 = SystemTimer::new(peripherals.SYSTIMER);
+    esp_hal_embassy::init(timer0.alarm0);
     let sclk = peripherals.GPIO0;
     let mosi = peripherals.GPIO1;
     let cs = peripherals.GPIO2;
@@ -57,11 +57,11 @@ async fn main(spawner: Spawner) {
     let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
 
+    let  cfg = Config::default();
     let spi = Spi::new(
         peripherals.SPI2,
-        Config::default()
-            .with_frequency(Rate::from_khz(1000))
-            .with_mode(Mode::_3),
+    cfg.with_mode(Mode::_3)
+
     )
     .unwrap()
     .with_sck(sclk)
@@ -69,6 +69,7 @@ async fn main(spawner: Spawner) {
     .with_dma(dma_channel)
     .with_buffers(dma_rx_buf, dma_tx_buf)
     .into_async();
+
     let mut driver = St7789::new(
         spi,
         Output::new(
@@ -85,8 +86,9 @@ async fn main(spawner: Spawner) {
         ),
         Delay {},
     );
-    info!("Embassy initialized!");
     driver.init().await.unwrap();
+
+    info!("Embassy initialized!");
     driver.set_col(0, 100).await.unwrap();
     driver.set_row(0, 100).await.unwrap();
     driver.write_memory().await.unwrap();
