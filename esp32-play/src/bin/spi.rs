@@ -28,7 +28,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 struct Delay {}
 impl Timer_ for Delay {
     async fn delay_ms(&self, ms: u64) -> () {
-        Timer::after_millis(ms * 100).await
+        Timer::after_millis(ms).await
     }
 }
 
@@ -64,6 +64,7 @@ async fn main(spawner: Spawner) {
         Output::new(cs, Level::High, Default::default()),
         Output::new(dc, Level::High, Default::default()),
         Delay {},
+        10,
     );
     driver.init().await.unwrap();
 
@@ -73,7 +74,7 @@ async fn main(spawner: Spawner) {
     driver.write_memory().await.unwrap();
     for i in 0..240 {
         for j in 0..320 {
-            driver.write_data(&[i, (j / 2) as u8]).await.unwrap();
+            driver.write_data(&[0x00, 0x00]).await.unwrap();
         }
     }
     // driver
