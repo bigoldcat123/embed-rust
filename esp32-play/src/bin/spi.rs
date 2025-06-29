@@ -11,14 +11,8 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use esp32_play2::init_spi;
 use esp_hal::clock::CpuClock;
-use esp_hal::dma::{DmaRxBuf, DmaTxBuf};
-use esp_hal::dma_buffers;
 use esp_hal::gpio::{Level, Output};
-use esp_hal::spi::master::{Config, Spi, SpiDmaBus};
-use esp_hal::spi::Mode;
-use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
-use esp_hal::timer::timg::TimerGroup;
 use esp_println as _;
 use super_simple_st7789driver::{St7789, Timer_};
 
@@ -74,18 +68,18 @@ async fn main(spawner: Spawner) {
     driver.init().await.unwrap();
 
     info!("Embassy initialized!");
-    driver.set_col(0, 239).await.unwrap();
-    driver.set_row(0, 319).await.unwrap();
+    driver.set_col(30, 100).await.unwrap();
+    driver.set_row(100, 200).await.unwrap();
     driver.write_memory().await.unwrap();
-    // for _ in 0..240 {
-    //     for _ in 0..320 {
-    //         driver.write_data(&[0xff, 0x11]).await.unwrap();
-    //     }
-    // }
-    driver
-        .write_data(include_bytes!("../../../e"))
-        .await
-        .unwrap();
+    for i in 0..240 {
+        for j in 0..320 {
+            driver.write_data(&[i, (j / 2) as u8]).await.unwrap();
+        }
+    }
+    // driver
+    //     .write_data(include_bytes!("../../../e"))
+    //     .await
+    //     .unwrap();
     // TODO: Spawn some tasks
     let _ = spawner;
     loop {
