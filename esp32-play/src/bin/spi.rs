@@ -9,6 +9,7 @@
 use defmt::info;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
+use esp32_play2::init_spi;
 use esp_hal::clock::CpuClock;
 use esp_hal::dma::{DmaRxBuf, DmaTxBuf};
 use esp_hal::dma_buffers;
@@ -48,27 +49,21 @@ async fn main(spawner: Spawner) {
     let timer0 = SystemTimer::new(peripherals.SYSTIMER);
     esp_hal_embassy::init(timer0.alarm0);
 
-    let sclk = peripherals.GPIO2;
-    let mosi = peripherals.GPIO3;
-    let cs = peripherals.GPIO7;
-    let dc = peripherals.GPIO6;
+    let (sclk, mosi, cs, dc) = (
+        peripherals.GPIO2,
+        peripherals.GPIO3,
+        peripherals.GPIO7,
+        peripherals.GPIO6,
+    );
 
-    let dma_channel = peripherals.DMA_CH0;
-    let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
-    let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
-    let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();
-
-    let cfg = Config::default();
-    let spi = Spi::new(
+    let spi = init_spi(
+        sclk,
+        Some(mosi),
+        None,
+        None,
         peripherals.SPI2,
-        cfg.with_mode(Mode::_2).with_frequency(Rate::from_mhz(10)),
-    )
-    .unwrap()
-    .with_sck(Output::new(sclk, Level::High, Default::default()))
-    .with_mosi(Output::new(mosi, Level::High, Default::default()))
-    .with_dma(dma_channel)
-    .with_buffers(dma_rx_buf, dma_tx_buf)
-    .into_async();
+        peripherals.DMA_CH0,
+    );
 
     let mut driver = St7789::new(
         spi,
