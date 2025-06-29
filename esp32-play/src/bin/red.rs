@@ -8,7 +8,7 @@
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_time::Timer;
+use embassy_time::{Instant, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{Input, InputConfig};
 use esp_hal::ledc::channel::ChannelIFace;
@@ -63,7 +63,7 @@ async fn main(spawner: Spawner) {
     channel0
         .configure(channel::config::Config {
             timer: &lstimer0,
-            duty_pct: 100,
+            duty_pct: 0,
             pin_config: channel::config::PinConfig::PushPull,
         })
         .unwrap();
@@ -78,7 +78,7 @@ async fn main(spawner: Spawner) {
         Timer::after_secs(2).await;
         info!("1");
 
-        channel0.set_duty(100).unwrap();
+        channel0.set_duty(50).unwrap();
         Timer::after_secs(2).await;
 
         // channel0.start_duty_fade(0, 100, 1000).unwrap();
@@ -91,10 +91,14 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn led(ipt: Input<'static>) {
     info!("hello led");
+    let mut x = Instant::now();
     loop {
         while ipt.is_low() {
-            info!("i am high")
+            info!("i am high {}", Instant::now() - x);
+            while ipt.is_low() {}
+            x = Instant::now();
         }
         Timer::after_millis(1).await;
     }
 }
+//6169483 -6612675

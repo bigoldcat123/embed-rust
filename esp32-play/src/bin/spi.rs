@@ -72,8 +72,8 @@ async fn main(spawner: Spawner) {
     driver.set_col(30, 100).await.unwrap();
     driver.set_row(100, 200).await.unwrap();
     driver.write_memory().await.unwrap();
-    for i in 0..240 {
-        for j in 0..320 {
+    for _ in 0..240 {
+        for _ in 0..320 {
             driver.write_data(&[0x00, 0x00]).await.unwrap();
         }
     }
