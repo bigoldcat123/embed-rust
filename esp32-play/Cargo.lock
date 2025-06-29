@@ -1203,9 +1203,9 @@ dependencies = [
 
 [[package]]
 name = "super_simple_st7789driver"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba8717b3e4b5a7671cf830f7dfd0f4ed602381afbc11924e21935f4780c54183"
+checksum = "bb1202b81172571a771505a7f024c2738a4614ac11f65d2c037f608612220510"
 dependencies = [
  "defmt 1.0.1",
  "embedded-hal 1.0.0",
