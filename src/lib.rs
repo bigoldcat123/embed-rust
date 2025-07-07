@@ -4,7 +4,7 @@
 pub mod display_logger;
 pub mod usb;
 use embassy_stm32::{time::Hertz, Config};
-
+pub mod sg90;
 pub mod at24c64;
 pub mod display_dirver;
 pub mod ssd1315;
