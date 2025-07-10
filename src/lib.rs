@@ -43,3 +43,26 @@ pub fn high_freq_config() -> Config {
     }
     config
 }
+
+#[macro_export]
+macro_rules! i2c {
+    ($peripherals:ident,$freq_khz:literal) => {
+        {
+            use embassy_stm32::{
+                i2c::{self, I2c},
+                time::khz,
+            };
+            let i2c: I2c<'static, embassy_stm32::mode::Async> = I2c::new(
+                $peripherals.I2C1,
+                $peripherals.PB6,
+                $peripherals.PB7,
+                Irqs,
+                $peripherals.DMA1_CH6,
+                $peripherals.DMA1_CH7,
+                khz($freq_khz),
+                Default::default(),
+            );
+            i2c
+        }
+    };
+}
