@@ -1,0 +1,1 @@
+/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/pwm: /Users/dadigua/Desktop/embed-rust/esp32-play/build.rs /Users/dadigua/Desktop/embed-rust/esp32-play/src/bin/pwm.rs /Users/dadigua/Desktop/embed-rust/esp32-play/src/lib.rs

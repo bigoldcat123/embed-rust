@@ -1,0 +1,3 @@
+cargo:rustc-link-arg=--error-handling-script=/Users/dadigua/Desktop/embed-rust/esp32-play/target/debug/build/esp32-play2-9b189a44ed876038/build-script-build
+cargo:rustc-link-arg=-Tdefmt.x
+cargo:rustc-link-arg=-Tlinkall.x

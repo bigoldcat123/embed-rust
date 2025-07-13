@@ -1,0 +1,18 @@
+/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/deps/libesp_bootloader_esp_idf-781ce0c03cd3af6e.rmeta: /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/lib.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/fmt.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/rom.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/partitions.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/ota.rs /Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/build/esp-bootloader-esp-idf-e0f11d14d388b42b/out/esp_bootloader_esp_idf_config_table.md
+
+/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/deps/libesp_bootloader_esp_idf-781ce0c03cd3af6e.rlib: /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/lib.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/fmt.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/rom.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/partitions.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/ota.rs /Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/build/esp-bootloader-esp-idf-e0f11d14d388b42b/out/esp_bootloader_esp_idf_config_table.md
+
+/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/deps/esp_bootloader_esp_idf-781ce0c03cd3af6e.d: /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/lib.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/fmt.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/rom.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/partitions.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/ota.rs /Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/build/esp-bootloader-esp-idf-e0f11d14d388b42b/out/esp_bootloader_esp_idf_config_table.md
+
+/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/lib.rs:
+/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/fmt.rs:
+/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/rom.rs:
+/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/partitions.rs:
+/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-bootloader-esp-idf-0.1.0/src/ota.rs:
+/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/build/esp-bootloader-esp-idf-e0f11d14d388b42b/out/esp_bootloader_esp_idf_config_table.md:
+
+# env-dep:ESP_BOOTLOADER_BUILD_DATE=2025-07-13
+# env-dep:ESP_BOOTLOADER_BUILD_TIME=10:53:41
+# env-dep:ESP_BOOTLOADER_ESP_IDF_CONFIG_MMU_PAGE_SIZE=64k
+# env-dep:ESP_BOOTLOADER_ESP_IDF_CONFIG_PARTITION_TABLE_OFFSET=32768
+# env-dep:OUT_DIR=/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/build/esp-bootloader-esp-idf-e0f11d14d388b42b/out
