@@ -1,4 +1,0 @@
-cargo:rustc-link-search=/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/build/defmt-12344aa3bea17d3e/out
-cargo:rustc-cfg=no_cas
-cargo:rustc-check-cfg=cfg(c_variadic)
-cargo:rustc-check-cfg=cfg(no_cas)

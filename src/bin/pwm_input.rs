@@ -7,20 +7,12 @@ use embassy_executor::Spawner;
 use embassy_stm32::{
     bind_interrupts,
     gpio::Output,
-    i2c,
     peripherals::{self, PC13},
-    time::{hz, khz},
-    timer::{
-        self,
-        pwm_input::PwmInput,
-        simple_pwm::{PwmPin, SimplePwm},
-    },
+    time::khz,
+    timer::{self, pwm_input::PwmInput},
 };
 use embassy_time::Timer as ETimer;
-use iic_pi::{
-    display_logger::{LoggerActor, logger_actor_task},
-    i2c,
-};
+use iic_pi::high_freq_config;
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -31,31 +23,17 @@ async fn main(_spawner: Spawner) -> ! {
         // I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
     });
 
-    let p = embassy_stm32::init(Default::default());
+    let cfg = high_freq_config();
+    let p = embassy_stm32::init(cfg);
 
     // let i2c = i2c!(p, 400);
     // let actor = LoggerActor::new(i2c);
     // let handle = actor.handle();
     // _spawner.spawn(logger_actor_task(actor)).unwrap();
 
-    _spawner.spawn(toggle(p.PC13)).unwrap();
+    // _spawner.spawn(toggle(p.PC13)).unwrap();
 
-    let pwm_pin = PwmPin::new_ch1(p.PA8, embassy_stm32::gpio::OutputType::PushPull);
-    let mut pin = SimplePwm::new(
-        p.TIM1,
-        Some(pwm_pin),
-        None,
-        None,
-        None,
-        hz(100),
-        Default::default(),
-    );
-    let mut pin = pin.ch1();
-    pin.enable();
-    info!("max duty {}", pin.max_duty_cycle());
-    pin.set_duty_cycle(50);
-
-    let mut ipt = PwmInput::new(p.TIM2, p.PA0, embassy_stm32::gpio::Pull::Down, khz(500));
+    let mut ipt = PwmInput::new(p.TIM2, p.PA0, embassy_stm32::gpio::Pull::Down, khz(72_000));
     ipt.enable();
     loop {
         loop {
@@ -66,11 +44,7 @@ async fn main(_spawner: Spawner) -> ! {
             let width = ipt.get_width_ticks();
             // 占空比
             let duty_cycle = ipt.get_duty_cycle();
-            // pin.set_duty_cycle(dutys[idx]);
-            // idx += 1;
-            // if idx == dutys.len() {
-            //     idx = 0;
-            // }
+
             info!(
                 "period ticks: {} width ticks: {} duty cycle: {}",
                 period, width, duty_cycle

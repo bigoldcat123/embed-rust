@@ -1,9 +1,0 @@
-/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/deps/libembassy_time_queue_utils-a49b16779dc4ba99.rmeta: /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/lib.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/queue_generic.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/../README.md
-
-/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/deps/libembassy_time_queue_utils-a49b16779dc4ba99.rlib: /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/lib.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/queue_generic.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/../README.md
-
-/Users/dadigua/Desktop/embed-rust/esp32-play/target/riscv32imc-unknown-none-elf/debug/deps/embassy_time_queue_utils-a49b16779dc4ba99.d: /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/lib.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/queue_generic.rs /Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/../README.md
-
-/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/lib.rs:
-/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/queue_generic.rs:
-/Users/dadigua/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-time-queue-utils-0.1.0/src/../README.md:
