@@ -37,7 +37,7 @@ async fn main(_spawner: Spawner) {
     let logger = LoggerActor::new(i2c);
     let handle: LoggerHandle = logger.handle();
     _spawner.spawn(logger_actor_task(logger)).unwrap();
-
+    
     unsafe {
         // BluePill board has a pull-up resistor on the D+ line.
         // Pull the D+ pin down to send a RESET condition to the USB bus.
